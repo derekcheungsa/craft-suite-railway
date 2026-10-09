@@ -74,25 +74,40 @@
 
   /* ---------------- EffectCraft ----------------
    * In-page API (v0.6, verified): window.effectcraft mirrors the desktop
-   * control channel: execute, commands, inspect, screenshot, renderFrame. */
+   * control channel: execute, commands, inspect, screenshot, renderFrame.
+   * window.effectcraft exists BEFORE the engine finishes booting, so guard
+   * every call and fail fast with a retry hint instead of hanging. */
   adapters.effectcraft = {
     app: "effectcraft",
     versions: ["0.6"],
     detect: function () { return typeof window.effectcraft === "object" && typeof window.effectcraft.execute === "function"; },
     readOnlyCommands: [],
+    notReady: function () {
+      var load = window.effectcraftLoad || {};
+      if (load.error) return "EffectCraft failed to start: " + load.error;
+      if (!load.readyMs) return "EffectCraft is still loading (large WASM; usually ready within ~15 s of page load) — retry in a few seconds";
+      return null;
+    },
     listCommands: function (filter) {
+      var nr = this.notReady(); if (nr) return Promise.reject(new Error(nr));
       return window.effectcraft.commands().then(function (cmds) {
         var f = (filter || "").toLowerCase();
         if (!f) return cmds;
-        var s = JSON.stringify(cmds);
         return cmds instanceof Array
           ? cmds.filter(function (c) { return JSON.stringify(c).toLowerCase().indexOf(f) !== -1; })
           : { note: "unfiltered catalog not an array; raw follows", raw: cmds, filter: filter };
       });
     },
-    runCommand: function (command, params) { return window.effectcraft.execute(command, params || {}); },
-    inspect: function () { return window.effectcraft.inspect(); },
+    runCommand: function (command, params) {
+      var nr = this.notReady(); if (nr) return Promise.reject(new Error(nr));
+      return window.effectcraft.execute(command, params || {});
+    },
+    inspect: function () {
+      var nr = this.notReady(); if (nr) return Promise.reject(new Error(nr));
+      return window.effectcraft.inspect();
+    },
     image: function (mode) {
+      var nr = this.notReady(); if (nr) return Promise.reject(new Error(nr));
       var call = mode === "screenshot"
         ? window.effectcraft.screenshot({})
         : window.effectcraft.renderFrame({});
