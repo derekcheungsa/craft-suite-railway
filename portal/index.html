@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Craft Suite — Open Creative Apps</title>
+<style>
+  :root {
+    --bg: #14151a; --panel: #1d1f27; --panel-hover: #23262f;
+    --text: #e8e9ee; --muted: #9a9daa; --accent: #6d5df6; --accent-soft: rgba(109,93,246,.15);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif;
+    min-height: 100vh; display: flex; flex-direction: column; align-items: center;
+  }
+  header { text-align: center; padding: 56px 24px 8px; max-width: 720px; }
+  h1 { font-size: 30px; margin: 0 0 6px; letter-spacing: -.5px; }
+  h1 span { color: var(--accent); }
+  header p { color: var(--muted); margin: 0; }
+  main {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 340px));
+    gap: 18px; padding: 32px 24px; max-width: 1160px; justify-content: center; width: 100%;
+  }
+  a.card {
+    display: block; background: var(--panel); border: 1px solid #2a2d38; border-radius: 14px;
+    padding: 20px 22px; text-decoration: none; color: var(--text);
+    transition: background .15s, border-color .15s, transform .15s;
+  }
+  a.card:hover { background: var(--panel-hover); border-color: var(--accent); transform: translateY(-2px); }
+  .card .name { font-size: 17px; font-weight: 650; display: flex; align-items: center; gap: 10px; }
+  .card .name .icon { font-size: 22px; }
+  .card .ver {
+    margin-left: auto; font-size: 11px; color: var(--accent); background: var(--accent-soft);
+    border-radius: 20px; padding: 2px 10px; font-family: ui-monospace, monospace;
+  }
+  .card .like { color: var(--muted); font-size: 12.5px; text-transform: uppercase; letter-spacing: .8px; margin: 2px 0 8px; }
+  .card .desc { color: var(--muted); font-size: 14px; }
+  footer {
+    color: var(--muted); font-size: 12.5px; text-align: center; padding: 24px; max-width: 680px;
+  }
+  footer code { color: var(--text); background: var(--panel); border-radius: 4px; padding: 1px 5px; font-size: 11.5px; }
+  footer a { color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Craft <span>Suite</span></h1>
+  <p>Six open-source, clean-room reimplementations of classic creative tools — pure Rust, compiled to WebAssembly, running entirely in your browser.</p>
+</header>
+<main id="apps"></main>
+<footer>
+  <p id="versions"></p>
+  <p>Your work is saved <strong>in your browser</strong> (OPFS / IndexedDB), tied to this exact domain — no server-side storage, nothing leaves your device. Export anything you care about, and pick your final domain before you start. Chrome or Edge recommended (WebGPU).</p>
+  <p>Apps by the <a href="https://github.com/storytold" rel="noopener">storytold</a> org · MIT / Apache-2.0 · not affiliated with Adobe</p>
+</footer>
+<script>
+const APPS = [
+  { slug: "photocraft",  icon: "🖼️", like: "Photoshop",   desc: "Raster image editor: layers, masks, adjustments, PSD import, GPU compositing." },
+  { slug: "lightcraft",  icon: "📷", like: "Lightroom",   desc: "Photo library and RAW developer: catalog, non-destructive edits, batch export." },
+  { slug: "pdfcraft",    icon: "📄", like: "Acrobat",     desc: "PDF viewer and toolkit: combine, split, annotate, fill forms, encrypt." },
+  { slug: "vectorcraft", icon: "✒️", like: "Illustrator", desc: "Vector graphics editor: paths, typography, effects, SVG and PDF export." },
+  { slug: "filmcraft",   icon: "🎬", like: "Premiere",    desc: "Non-linear video editor: timeline, color grading, effects, in-house codecs." },
+  { slug: "effectcraft", icon: "✨", like: "After Effects", desc: "Motion graphics and compositing: layers, keyframes, expressions, render queue." },
+];
+const el = document.getElementById("apps");
+for (const a of APPS) {
+  const card = document.createElement("a");
+  card.className = "card";
+  card.href = a.slug + "/";
+  card.innerHTML =
+    '<div class="name"><span class="icon">' + a.icon + '</span>' + a.slug.charAt(0).toUpperCase() + a.slug.slice(1) +
+    '<span class="ver" data-ver="' + a.slug + '"></span></div>' +
+    '<div class="like">like ' + a.like + '</div>' +
+    '<div class="desc">' + a.desc + '</div>';
+  el.appendChild(card);
+}
+fetch("versions.json").then(r => r.json()).then(v => {
+  document.querySelectorAll("[data-ver]").forEach(s => { s.textContent = v[s.dataset.ver] || ""; });
+  document.getElementById("versions").textContent =
+    "Versions — " + Object.entries(v).map(([k, x]) => k + " " + x).join(" · ");
+}).catch(() => {});
+</script>
+</body>
+</html>

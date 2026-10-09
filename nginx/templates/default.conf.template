@@ -1,0 +1,95 @@
+# Rendered by the official nginx image entrypoint (envsubst). Only ${PORT}
+# is substituted; nginx runtime vars like $uri are left untouched.
+
+server {
+    listen ${PORT};
+    server_name _;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # Explicit types so .wasm is never served as octet-stream (required for
+    # WebAssembly.instantiateStreaming) and .js as text/javascript.
+    types {
+        application/wasm                 wasm;
+        text/javascript                  js mjs;
+        text/html                        html htm;
+        text/css                         css;
+        image/svg+xml                    svg svgz;
+        application/manifest+json        webmanifest;
+        application/json                 json;
+        image/png                        png;
+        image/x-icon                     ico;
+        text/plain                       txt;
+        application/octet-stream         wasm.orig;
+    }
+
+    # Precompressed .gz copies are served by gzip_static; gzip is the
+    # fallback for anything not precompressed at build time.
+    gzip on;
+    gzip_static on;
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_comp_level 6;
+    gzip_types application/wasm text/javascript text/css application/json image/svg+xml application/manifest+json text/plain;
+
+    # --- lightcraft & effectcraft ship UNHASHED filenames (lightcraft_web.js,
+    # --- effectcraft_web_bg.wasm). Their upstream HOSTING.md requires
+    # --- revalidation on every fetch so version upgrades are picked up.
+    location ~ ^/(lightcraft|effectcraft)/ {
+        add_header Cache-Control "no-cache" always;
+        add_header Cross-Origin-Opener-Policy "same-origin" always;
+        add_header Cross-Origin-Embedder-Policy "require-corp" always;
+        add_header Cross-Origin-Resource-Policy "same-origin" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        try_files $uri $uri/ =404;
+    }
+
+    # --- Hashed/immutable app assets: cache forever.
+    location ~ ^/(photocraft|pdfcraft|vectorcraft|filmcraft)/.*\.(wasm|js)$ {
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+        add_header Cross-Origin-Opener-Policy "same-origin" always;
+        add_header Cross-Origin-Embedder-Policy "require-corp" always;
+        add_header Cross-Origin-Resource-Policy "same-origin" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        try_files $uri =404;
+    }
+
+    # --- HTML documents (direct requests): always revalidate.
+    location ~ (^|/)index\.html$ {
+        add_header Cache-Control "no-cache" always;
+        add_header Cross-Origin-Opener-Policy "same-origin" always;
+        add_header Cross-Origin-Embedder-Policy "require-corp" always;
+        add_header Cross-Origin-Resource-Policy "same-origin" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        try_files $uri =404;
+    }
+
+    # --- Directory roots (/, /photocraft/, ...): always revalidate.
+    location ~ /$ {
+        add_header Cache-Control "no-cache" always;
+        add_header Cross-Origin-Opener-Policy "same-origin" always;
+        add_header Cross-Origin-Embedder-Policy "require-corp" always;
+        add_header Cross-Origin-Resource-Policy "same-origin" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        try_files $uri $uri/ =404;
+    }
+
+    # --- Everything else: portal assets, favicons, snippets, workers, licenses.
+    location / {
+        add_header Cache-Control "no-cache" always;
+        add_header Cross-Origin-Opener-Policy "same-origin" always;
+        add_header Cross-Origin-Embedder-Policy "require-corp" always;
+        add_header Cross-Origin-Resource-Policy "same-origin" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        try_files $uri $uri/ =404;
+    }
+
+    location = /healthz {
+        add_header Content-Type text/plain always;
+        add_header Cross-Origin-Opener-Policy "same-origin" always;
+        add_header Cross-Origin-Embedder-Policy "require-corp" always;
+        add_header Cross-Origin-Resource-Policy "same-origin" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        return 200 "ok\n";
+    }
+}
