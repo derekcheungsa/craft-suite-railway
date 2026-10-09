@@ -39,7 +39,11 @@ A `/healthz` endpoint is available for healthchecks.
 
 ### Deployment Dependencies
 
-None beyond the template itself: no databases, no volumes, no external services. The single service builds from this repo's Dockerfile, which downloads pinned release artifacts of the six upstream apps at build time. Service variables (`PHOTOCRAFT_VERSION`, `LIGHTCRAFT_VERSION`, `PDFCRAFT_VERSION`, `VECTORCRAFT_VERSION`, `FILMCRAFT_VERSION`, `EFFECTCRAFT_VERSION`) pass through as Dockerfile build args — bump one and redeploy to upgrade that app. The build fails fast if a pinned artifact is missing.
+None beyond the template itself: no databases, no volumes, no external services. The project has two services: `craft-suite` (nginx static serving, builds from the root Dockerfile) and `craft-relay` (a small Node service in `server/` — an MCP relay that lets Claude Desktop drive the apps in your browser, see below). The suite builds from pinned release artifacts of the six upstream apps at build time. Service variables (`PHOTOCRAFT_VERSION`, `LIGHTCRAFT_VERSION`, `PDFCRAFT_VERSION`, `VECTORCRAFT_VERSION`, `FILMCRAFT_VERSION`, `EFFECTCRAFT_VERSION`) pass through as Dockerfile build args — bump one and redeploy to upgrade that app. The build fails fast if a pinned artifact is missing.
+
+## Optional: drive the apps from Claude Desktop (Craft Relay)
+
+The template includes an MCP relay service. Set `MCP_TOKEN`, `BRIDGE_TOKEN` and `ALLOWED_ORIGINS` (your suite domain) on `craft-relay`, and `RELAY_URL` (the relay's domain) on `craft-suite`. Open any app, click the ⦿ **agent** button, paste the bridge token, and add the relay's `/mcp` URL as a Claude Desktop custom connector with an `Authorization: Bearer <MCP_TOKEN>` header. Tools: `list_sessions`, `list_commands`, `run_command`, `run_batch`, `inspect`, `get_image`. Nothing connects until you click Connect in the page; a Disconnect button is always visible. See the repo README for the full walkthrough.
 
 ## Credits
 
