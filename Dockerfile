@@ -36,6 +36,16 @@ RUN set -eux; \
       "${VECTORCRAFT_VERSION}" "${FILMCRAFT_VERSION}" "${EFFECTCRAFT_VERSION}" \
       > /site/versions.json
 
+# Craft Relay bridge: static script served same-origin. Inject the script
+# tags BEFORE precompressing, so index.html.gz matches the on-disk file.
+ARG RELAY_URL=""
+COPY bridge/ /site/bridge/
+RUN printf 'window.CRAFT_RELAY = { url: "%s" };\n' "$RELAY_URL" > /site/bridge/config.js && \
+    for f in /site/*/index.html; do \
+      grep -q 'bridge/loader.js' "$f" || \
+      sed -i 's#</body>#<script src="/bridge/config.js"></script><script src="/bridge/adapters.js"></script><script src="/bridge/loader.js" defer></script></body>#' "$f"; \
+    done
+
 # Precompress the heavy payloads once at build time; nginx serves the .gz
 # copies via gzip_static instead of compressing on every request.
 RUN find /site -type f \( -name '*.wasm' -o -name '*.js' -o -name '*.html' \) \
