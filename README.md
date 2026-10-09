@@ -69,10 +69,17 @@ page opens a WebSocket back to the relay (nothing connects until you click
    paste the `BRIDGE_TOKEN`, Connect. Ask Claude: *"What tabs are connected?"*
 
 **Tools:** `list_sessions`, `list_commands`, `run_command`, `run_batch` (≤20),
-`inspect`, `get_image` (≤1 MB previews; EffectCraft renders frames). Verified
-adapters: LightCraft v0.4 (`lightcraft.command`), EffectCraft v0.6
-(`execute/commands/inspect/renderFrame`). FilmCraft/PhotoCraft/PdfCraft/
-VectorCraft web builds expose no in-page agent API yet (checked 2026-10).
+`inspect`, `get_image` (≤1 MB previews). Verified adapters: LightCraft v0.4
+(`lightcraft.command`), EffectCraft v0.6 (`execute/commands/inspect/renderFrame`),
+and FilmCraft via an unmodified build of `main` (`window.filmcraft`, 675 commands —
+`execute/commands/inspect/screenshot`), served through `FILMCRAFT_URL` until
+upstream ships the API in a tagged release (then drop the override and bump
+`FILMCRAFT_VERSION`). PdfCraft/VectorCraft/PhotoCraft web builds expose no
+in-page agent API yet (checked 2026-10).
+
+**Note on EffectCraft and FilmCraft:** both engines answer agent requests on
+their UI frame loop. Keep the tab visible and the app running; in a fully
+hidden/stalled tab, commands hang until the relay's 20 s timeout.
 
 **Safety:** bearer-authed MCP, origin-allowlisted + token-gated bridge sockets,
 destructive-command denylist, in-page read-only toggle and Disconnect,
