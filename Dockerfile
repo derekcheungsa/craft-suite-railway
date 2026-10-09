@@ -11,14 +11,18 @@ ARG PDFCRAFT_VERSION=0.4.0
 ARG VECTORCRAFT_VERSION=0.7.0
 ARG FILMCRAFT_VERSION=0.4.0
 ARG EFFECTCRAFT_VERSION=0.6.0
+# Optional: serve a custom FilmCraft web build instead of the upstream release
+# (e.g. a build from main that ships the window.filmcraft agent API).
+ARG FILMCRAFT_URL=""
 
 RUN apk add --no-cache curl unzip gzip
 WORKDIR /site
 
 RUN set -eux; \
     fetch() { \
-      repo="$1"; ver="$2"; \
-      url="https://github.com/storytold/${repo}/releases/download/v${ver}/${repo}-web-${ver}.zip"; \
+      repo="$1"; ver="$2"; override="${3:-}"; \
+      if [ -n "$override" ]; then url="$override"; \
+      else url="https://github.com/storytold/${repo}/releases/download/v${ver}/${repo}-web-${ver}.zip"; fi; \
       echo "fetching ${url}"; \
       curl -fsSL --retry 3 -o /tmp/app.zip "${url}"; \
       unzip -q /tmp/app.zip -d /tmp/app; \
@@ -29,7 +33,7 @@ RUN set -eux; \
     fetch lightcraft  "${LIGHTCRAFT_VERSION}"; \
     fetch pdfcraft    "${PDFCRAFT_VERSION}"; \
     fetch vectorcraft "${VECTORCRAFT_VERSION}"; \
-    fetch filmcraft   "${FILMCRAFT_VERSION}"; \
+    fetch filmcraft   "${FILMCRAFT_VERSION}" "${FILMCRAFT_URL}"; \
     fetch effectcraft "${EFFECTCRAFT_VERSION}"; \
     printf '{"photocraft":"v%s","lightcraft":"v%s","pdfcraft":"v%s","vectorcraft":"v%s","filmcraft":"v%s","effectcraft":"v%s"}\n' \
       "${PHOTOCRAFT_VERSION}" "${LIGHTCRAFT_VERSION}" "${PDFCRAFT_VERSION}" \

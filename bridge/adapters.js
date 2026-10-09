@@ -32,7 +32,7 @@
       if (s.length > 1000) return { mime: "image/png", base64: s };
       throw new Error("image call returned unexpected text: " + s.slice(0, 120));
     }
-    var b = result.base64 || result.png || result.data || (result.image && result.image.base64);
+    var b = result.base64 || result.pngBase64 || result.png || result.data || (result.image && result.image.base64);
     if (!b) throw new Error("image call returned no image field: " + JSON.stringify(result).slice(0, 200));
     return { mime: result.mime || result.mimeType || result.contentType || "image/png", base64: b };
   }
@@ -113,6 +113,51 @@
         : window.effectcraft.renderFrame({});
       return call.then(normalizeImage, function (e) {
         throw new Error("image call failed: " + (e && (e.message || e)));
+      });
+    }
+  };
+
+  /* ---------------- FilmCraft ----------------
+   * In-page API (main @ 7b6c134, post-v0.4.0; see docs/web.md): the desktop
+   * control channel as promises. The stock v0.4.0 release has no in-page API
+   * (detect() simply never fires there). Replies are polled on the UI frame
+   * loop, so a stalled/hidden tab means calls hang until the relay timeout. */
+  adapters.filmcraft = {
+    app: "filmcraft",
+    versions: ["0.4"],
+    detect: function () { return typeof window.filmcraft === "object" && typeof window.filmcraft.execute === "function"; },
+    readOnlyCommands: [],
+    notReady: function () {
+      var load = window.filmcraftLoad || {};
+      if (load.fatal) return "FilmCraft crashed after startup: " + String(load.fatal).slice(0, 160);
+      if (load.error) return "FilmCraft failed to start: " + String(load.error).slice(0, 160);
+      if (!load.readyMs) return "FilmCraft is still loading — retry in a few seconds";
+      return null;
+    },
+    listCommands: function (filter) {
+      var nr = this.notReady(); if (nr) return Promise.reject(new Error(nr));
+      return window.filmcraft.commands().then(function (cmds) {
+        var f = (filter || "").toLowerCase();
+        if (!f) return cmds;
+        return cmds instanceof Array
+          ? cmds.filter(function (c) { return JSON.stringify(c).toLowerCase().indexOf(f) !== -1; })
+          : { note: "catalog not an array; raw follows", raw: cmds, filter: filter };
+      });
+    },
+    runCommand: function (command, params) {
+      var nr = this.notReady(); if (nr) return Promise.reject(new Error(nr));
+      return window.filmcraft.execute(command, params || {});
+    },
+    inspect: function () {
+      var nr = this.notReady(); if (nr) return Promise.reject(new Error(nr));
+      return window.filmcraft.inspect();
+    },
+    image: function () {
+      // canvas screenshot ({pngBase64,width,height}); "frame" and "screenshot"
+      // are the same thing here — no separate renderFrame in the web API.
+      var nr = this.notReady(); if (nr) return Promise.reject(new Error(nr));
+      return window.filmcraft.screenshot({}).then(normalizeImage, function (e) {
+        throw new Error("screenshot failed: " + (e && (e.message || e)));
       });
     }
   };
