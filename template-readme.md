@@ -1,4 +1,4 @@
-# Craft Suite — 6 Open-Source Creative Apps (Rust + WASM)
+# Deploy and Host Craft Suite — 6 Open-Source Creative Apps (Rust + WASM)
 
 Deploy an entire open-source creative suite in one click. Six desktop-grade apps, rewritten from scratch in pure Rust and compiled to WebAssembly, running entirely in your browser:
 
@@ -11,19 +11,35 @@ Deploy an entire open-source creative suite in one click. Six desktop-grade apps
 | `/filmcraft/` | FilmCraft | Premiere Pro — timeline video editing, grading, codecs |
 | `/effectcraft/` | EffectCraft | After Effects — motion graphics, keyframes, render queue |
 
-## How it works
+The root URL serves a portal page linking to all six apps.
 
-Every app is 100% client-side — the server is just nginx handing over static WASM files. No database, no storage service, no accounts. That means near-zero idle resource usage; it fits comfortably in the Hobby plan. WASM payloads are precompressed and cached aggressively, so repeat loads are fast.
+## About Hosting
 
-## Your data stays in your browser
+Every app is 100% client-side — the service is just nginx handing over static WASM files. There is no server-side code, no database, no storage service, and no accounts. WASM payloads (the largest is ~65 MB raw) are precompressed with gzip at build time and served with immutable caching for hashed assets, so repeat loads are fast.
 
-Documents and projects persist to browser storage (OPFS/IndexedDB) — nothing is sent to or stored on the server. Note that browser storage is tied to the exact domain: **configure your custom domain before importing important work**, and export anything you can't afford to lose.
+**Your data stays in your browser.** Documents and projects persist to browser storage (OPFS/IndexedDB) — nothing is sent to or stored on the server. Browser storage is tied to the exact domain: **configure your custom domain before importing important work**, and export anything you can't afford to lose. Chrome or Edge recommended (WebGPU); other browsers fall back to WebGL2/CPU paths.
 
-## Tips
+A `/healthz` endpoint is available for healthchecks.
 
-- Chrome or Edge recommended (WebGPU). Other browsers fall back to WebGL2/CPU paths.
-- Each app's version is pinned via a variable (e.g. `PHOTOCRAFT_VERSION`) — bump it to upgrade that app, then redeploy.
-- A `/healthz` endpoint is available for healthchecks.
+## Why Deploy
+
+- **One URL, six tools** — a full creative suite on your own domain, behind no third-party service.
+- **Private by architecture** — no accounts, no telemetry, no server-side document storage; files never leave the user's machine.
+- **Nearly free to run** — static serving only; idle resource usage is close to zero and fits comfortably in the Hobby plan.
+- **Try before you install** — these are the browser builds of popular open-source desktop apps (PhotoCraft alone has 27k+ stars), no install required.
+
+## Common Use Cases
+
+- A personal creative toolbox available from any machine with a browser.
+- Letting a team or class try Photoshop-/Illustrator-/Premiere-style open-source tools without installing desktop builds.
+- A sandbox for evaluating the craft apps before adopting the desktop versions.
+- A quick demo of what Rust + WebAssembly can do in production.
+
+## Dependencies for this template
+
+### Deployment Dependencies
+
+None beyond the template itself: no databases, no volumes, no external services. The single service builds from this repo's Dockerfile, which downloads pinned release artifacts of the six upstream apps at build time. Service variables (`PHOTOCRAFT_VERSION`, `LIGHTCRAFT_VERSION`, `PDFCRAFT_VERSION`, `VECTORCRAFT_VERSION`, `FILMCRAFT_VERSION`, `EFFECTCRAFT_VERSION`) pass through as Dockerfile build args — bump one and redeploy to upgrade that app. The build fails fast if a pinned artifact is missing.
 
 ## Credits
 
