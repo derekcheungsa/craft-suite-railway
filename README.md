@@ -43,3 +43,41 @@ Local test: `docker build -t craft-suite . && docker run -p 8090:8080 craft-suit
 Apps are MIT/Apache-2.0; ArtCraft name/logos are trademarked — this deployment
  redistributes unmodified upstream release artifacts and is not affiliated
  with Adobe or ArtCraft.
+
+## Craft Relay — drive the apps from Claude Desktop (MCP)
+
+A second service, `craft-relay`, exposes the browser apps as MCP tools. Claude
+Desktop connects to the relay's public MCP endpoint; a bridge inside each app
+page opens a WebSocket back to the relay (nothing connects until you click
+**Connect agent** in the page and paste the bridge token).
+
+**Setup (~5 minutes):**
+
+1. Deploy this project (both services). Note the two domains:
+   - suite: `https://<suite>.up.railway.app`
+   - relay: `https://<relay>.up.railway.app` (`railway domain --service craft-relay`)
+2. On the `craft-relay` service, set variables:
+   - `MCP_TOKEN` — 32+ random bytes (`openssl rand -base64 32`)
+   - `BRIDGE_TOKEN` — another random string
+   - `ALLOWED_ORIGINS` — your suite origin (`https://<suite>.up.railway.app`)
+3. On the `craft-suite` service, set `RELAY_URL=https://<relay>.up.railway.app`
+   (passed to the Dockerfile as a build arg; the bridge then pre-fills itself).
+4. In Claude Desktop → Settings → Connectors → Add custom connector:
+   - URL: `https://<relay>.up.railway.app/mcp`
+   - Request header: `Authorization: Bearer <MCP_TOKEN>`
+5. Open an app (Chrome/Edge recommended), click the ⦿ button (or add `?agent=1`),
+   paste the `BRIDGE_TOKEN`, Connect. Ask Claude: *"What tabs are connected?"*
+
+**Tools:** `list_sessions`, `list_commands`, `run_command`, `run_batch` (≤20),
+`inspect`, `get_image` (≤1 MB previews; EffectCraft renders frames). Verified
+adapters: LightCraft v0.4 (`lightcraft.command`), EffectCraft v0.6
+(`execute/commands/inspect/renderFrame`). FilmCraft/PhotoCraft/PdfCraft/
+VectorCraft web builds expose no in-page agent API yet (checked 2026-10).
+
+**Safety:** bearer-authed MCP, origin-allowlisted + token-gated bridge sockets,
+destructive-command denylist, in-page read-only toggle and Disconnect,
+10 calls/s rate limit, 20 s call timeout, max 5 tabs, no parameters or images
+in relay logs. While connected, an agent can run commands in that tab only —
+the page shows a persistent indicator.
+
+See `docs/PRD-Craft-Relay.pdf` for the design document.
