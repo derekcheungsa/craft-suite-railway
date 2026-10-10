@@ -273,7 +273,7 @@
       // flatten via the export pipeline, no screen/GPU capture, works in
       // background tabs. Auto-shrinks under 1MB engine-side; the bridge
       // downscaler is a second guard.
-      return window.photocraft.request("document.render", { format: "jpg", maxSize: 1280 }).then(function (r) {
+      return window.photocraft.execute("document.render", { format: "jpg", maxSize: 1280 }).then(function (r) {
         if (!r || !r.data) throw new Error("document.render returned no data");
         return { mime: r.format === "png" ? "image/png" : "image/jpeg", base64: r.data };
       }).then(normalizeImage, function (e) {
