@@ -20,11 +20,14 @@ custom domain *before* importing work, and export anything you care about.
 ## Deploy
 
 Railway detects the Dockerfile. Build-time `ARG`s pin each app's version
-(override to upgrade; build fails fast if an artifact is missing):
+(override to upgrade; build fails fast if an artifact is missing). Defaults
+serve the FilmCraft/PhotoCraft `-main` web builds that ship the in-page
+agent APIs:
 
 ```
-PHOTOCRAFT_VERSION=0.5.0  LIGHTCRAFT_VERSION=0.4.0  PDFCRAFT_VERSION=0.4.0
-VECTORCRAFT_VERSION=0.7.0 FILMCRAFT_VERSION=0.4.0   EFFECTCRAFT_VERSION=0.6.0
+PHOTOCRAFT_VERSION=0.5.0-main4  LIGHTCRAFT_VERSION=0.4.0  PDFCRAFT_VERSION=0.4.0
+VECTORCRAFT_VERSION=0.7.0       FILMCRAFT_VERSION=0.4.0-main  EFFECTCRAFT_VERSION=0.6.0
+FILMCRAFT_URL=... PHOTOCRAFT_URL=...  (fork release zips; see Dockerfile)
 ```
 
 Local test: `docker build -t craft-suite . && docker run -p 8090:8080 craft-suite`
@@ -51,22 +54,24 @@ Desktop connects to the relay's public MCP endpoint; a bridge inside each app
 page opens a WebSocket back to the relay (nothing connects until you click
 **Connect agent** in the page and paste the bridge token).
 
-**Setup (~5 minutes):**
+The template deploys with everything pre-wired: nginx proxies `/relay/` to
+the relay service over Railway's private network, so the bridge talks to the
+relay **same-origin** — no `RELAY_URL` to configure and no origin allowlist to
+keep in sync. `MCP_TOKEN` and `BRIDGE_TOKEN` are pre-filled with Railway's
+`${{secret(...)}}` function, so every deployment gets fresh random tokens.
+`ALLOWED_ORIGINS` defaults to allow-all (the bridge token remains the gate);
+set it to your suite origin(s), comma-separated, to tighten.
 
-1. Deploy this project (both services). Note the two domains:
-   - suite: `https://<suite>.up.railway.app`
-   - relay: `https://<relay>.up.railway.app` (`railway domain --service craft-relay`)
-2. On the `craft-relay` service, set variables:
-   - `MCP_TOKEN` — 32+ random bytes (`openssl rand -base64 32`)
-   - `BRIDGE_TOKEN` — another random string
-   - `ALLOWED_ORIGINS` — your suite origin (`https://<suite>.up.railway.app`)
-3. On the `craft-suite` service, set `RELAY_URL=https://<relay>.up.railway.app`
-   (passed to the Dockerfile as a build arg; the bridge then pre-fills itself).
-4. In Claude Desktop → Settings → Connectors → Add custom connector:
+**Setup (~3 minutes after deploy):**
+
+1. Deploy this project (both services). Get the two generated tokens from the
+   `craft-relay` service's Variables tab (`MCP_TOKEN`, `BRIDGE_TOKEN`).
+2. In Claude Desktop → Settings → Connectors → Add custom connector:
    - URL: `https://<relay>.up.railway.app/mcp`
    - Request header: `Authorization: Bearer <MCP_TOKEN>`
-5. Open an app (Chrome/Edge recommended), click the ⦿ button (or add `?agent=1`),
-   paste the `BRIDGE_TOKEN`, Connect. Ask Claude: *"What tabs are connected?"*
+3. Open an app (Chrome/Edge recommended), click the ⦿ button (or add `?agent=1`),
+   paste the `BRIDGE_TOKEN` (relay URL is already `/relay`), Connect. Ask
+   Claude: *"What tabs are connected?"*
 
 **Tools:** `list_sessions`, `list_commands`, `run_command`, `run_batch` (≤20),
 `inspect`, `get_image` (≤1 MB previews), `list_files`, `get_file` (small files
@@ -75,12 +80,12 @@ large media never enters the conversation), `put_file` (import INTO the app from
 base64 or a URL the page fetches — generated images become documents/media;
 PhotoCraft and FilmCraft and EffectCraft). Together they close the loop: export
 → send_file → transcribe/edit → put_file back in. Verified adapters: LightCraft v0.4 (`lightcraft.command`),
-EffectCraft v0.6 (`execute/commands/inspect/renderFrame`), FilmCraft via a
-build of `main` (`window.filmcraft`, 675 commands — `FILMCRAFT_URL` until
-upstream tags it), and PhotoCraft via a minimal fork of `main@9c427a7` that
-installs `window.photocraft` (851 commands; patch in
-`docs/photocraft-agent-api.patch`, PR candidate). PhotoCraft screenshots are
-not supported by eframe's web runner — `get_image` there returns a clear error.
+EffectCraft v0.6 (`execute/commands/inspect/renderFrame`), FilmCraft
+`0.4.0-main` (`window.filmcraft`, 675 commands; built from unreleased `main`),
+and PhotoCraft `0.5.0-main4` (`window.photocraft`, 851 commands — a minimal
+fork of `main@0c72d95`; patch in `docs/photocraft-agent-api.patch`, PR
+candidate). PhotoCraft `get_image` renders the document composite
+engine-side (`document.render`), sidestepping eframe's web-screenshot limit.
 PdfCraft/VectorCraft web builds expose no in-page agent API yet (checked 2026-10).
 
 **Note on EffectCraft and FilmCraft:** both engines answer agent requests on
