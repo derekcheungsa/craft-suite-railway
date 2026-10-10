@@ -466,6 +466,23 @@ index 3883e25..0a209d9 100644
  }
  
  /// Files of a folder that look like images we can open, sorted by name.
+diff --git a/crates/engine/src/layer_menu_cmds.rs b/crates/engine/src/layer_menu_cmds.rs
+index 5ceb30e..0b24a22 100644
+--- a/crates/engine/src/layer_menu_cmds.rs
++++ b/crates/engine/src/layer_menu_cmds.rs
+@@ -865,8 +865,10 @@ fn write_file(path: &str, bytes: &[u8]) -> Result<()> {
+ }
+ 
+ #[cfg(target_arch = "wasm32")]
+-fn write_file(_: &str, _: &[u8]) -> Result<()> {
+-    Err(other("writing files needs the desktop app"))
++fn write_file(path: &str, bytes: &[u8]) -> Result<()> {
++    // No file system in the browser: exports land in the agent API's table.
++    crate::web_files::store(path, bytes);
++    Ok(())
+ }
+ 
+ macro_rules! spec {
 diff --git a/crates/engine/src/lib.rs b/crates/engine/src/lib.rs
 index c135711..1779ec6 100644
 --- a/crates/engine/src/lib.rs
