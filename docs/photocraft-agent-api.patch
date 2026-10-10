@@ -1,0 +1,136 @@
+diff --git a/apps/photocraft-web/Cargo.toml b/apps/photocraft-web/Cargo.toml
+index 6b4c627..ff6c1d1 100644
+--- a/apps/photocraft-web/Cargo.toml
++++ b/apps/photocraft-web/Cargo.toml
+@@ -1,42 +1,43 @@
+-[package]
+-name = "photocraft-web"
+-description = "Photocraft in the browser (eframe web runner, WebGPU with WebGL2 fallback)"
+-version.workspace = true
+-edition.workspace = true
+-license.workspace = true
+-publish = false
+-
+-[features]
+-# Open HEIC/HEIF photos (the optional photocraft-heif crate). Not default so distributors choose
+-# it; official builds (CI, packaging/, release) build with `--features heif`.
+-heif = ["photocraft-codecs/heif"]
+-
+-[lints]
+-workspace = true
+-
+-[[bin]]
+-name = "photocraft-web"
+-path = "src/main.rs"
+-
+-[dependencies]
+-photocraft-engine = { workspace = true }
+-photocraft-io = { workspace = true }
+-photocraft-codecs = { workspace = true }
+-photocraft-doc = { workspace = true }
+-photocraft-ui-egui = { workspace = true }
+-egui = { workspace = true }
+-log = { workspace = true }
+-
+-[target.'cfg(target_arch = "wasm32")'.dependencies]
+-# `wgpu` pulls egui-wgpu's defaults: WebGPU plus the WebGL2 fallback.
+-eframe = { workspace = true, features = ["default_fonts", "wgpu", "accesskit"] }
+-rfd = { workspace = true }
+-wasm-bindgen = "0.2"
+-wasm-bindgen-futures = "0.4"
+-js-sys = "0.3"
+-web-sys = { version = "0.3", features = ["Window", "Document", "Element", "HtmlElement", "HtmlCanvasElement", "HtmlAnchorElement", "Blob", "BlobPropertyBag", "Url", "Location", "CssStyleDeclaration", "Storage", "Event", "EventTarget", "MouseEvent", "PointerEvent", "BeforeUnloadEvent", "AbortController", "AbortSignal", "DomException", "Response", "IdbFactory", "IdbOpenDbRequest", "IdbDatabase", "IdbRequest", "IdbTransaction", "IdbTransactionMode", "IdbObjectStore", "IdbCursor", "IdbCursorWithValue", "RequestInit", "Navigator"] }
+-
+-[dev-dependencies]
+-serde_json = { workspace = true }
+-photocraft-paint = { workspace = true }
+-photocraft-psd = { workspace = true }
++[package]
++name = "photocraft-web"
++description = "Photocraft in the browser (eframe web runner, WebGPU with WebGL2 fallback)"
++version.workspace = true
++edition.workspace = true
++license.workspace = true
++publish = false
++
++[features]
++# Open HEIC/HEIF photos (the optional photocraft-heif crate). Not default so distributors choose
++# it; official builds (CI, packaging/, release) build with `--features heif`.
++heif = ["photocraft-codecs/heif"]
++
++[lints]
++workspace = true
++
++[[bin]]
++name = "photocraft-web"
++path = "src/main.rs"
++
++[dependencies]
++photocraft-engine = { workspace = true }
++photocraft-io = { workspace = true }
++photocraft-codecs = { workspace = true }
++photocraft-doc = { workspace = true }
++photocraft-ui-egui = { workspace = true }
++egui = { workspace = true }
++log = { workspace = true }
++
++[target.'cfg(target_arch = "wasm32")'.dependencies]
++# `wgpu` pulls egui-wgpu's defaults: WebGPU plus the WebGL2 fallback.
++eframe = { workspace = true, features = ["default_fonts", "wgpu", "accesskit"] }
++rfd = { workspace = true }
++wasm-bindgen = "0.2"
++serde_json = { workspace = true }
++wasm-bindgen-futures = "0.4"
++js-sys = "0.3"
++web-sys = { version = "0.3", features = ["Window", "Document", "Element", "HtmlElement", "HtmlCanvasElement", "HtmlAnchorElement", "Blob", "BlobPropertyBag", "Url", "Location", "CssStyleDeclaration", "Storage", "Event", "EventTarget", "MouseEvent", "PointerEvent", "BeforeUnloadEvent", "AbortController", "AbortSignal", "DomException", "Response", "IdbFactory", "IdbOpenDbRequest", "IdbDatabase", "IdbRequest", "IdbTransaction", "IdbTransactionMode", "IdbObjectStore", "IdbCursor", "IdbCursorWithValue", "RequestInit", "Navigator"] }
++
++[dev-dependencies]
++serde_json = { workspace = true }
++photocraft-paint = { workspace = true }
++photocraft-psd = { workspace = true }
+diff --git a/apps/photocraft-web/src/main.rs b/apps/photocraft-web/src/main.rs
+index 5ba75f5..12484eb 100644
+--- a/apps/photocraft-web/src/main.rs
++++ b/apps/photocraft-web/src/main.rs
+@@ -22,6 +22,9 @@ mod preset_bridge;
+ #[cfg(target_arch = "wasm32")]
+ mod indexed_presets;
+ 
++#[cfg(target_arch = "wasm32")]
++mod api;
++
+ #[cfg(target_arch = "wasm32")]
+ mod web;
+ 
+diff --git a/apps/photocraft-web/src/web.rs b/apps/photocraft-web/src/web.rs
+index 83fa57e..0a87726 100644
+--- a/apps/photocraft-web/src/web.rs
++++ b/apps/photocraft-web/src/web.rs
+@@ -80,9 +80,16 @@ pub fn start() {
+                     let inbox: Inbox = Arc::default();
+                     let served: Served = Arc::default();
+                     load_font_manifest(served.clone(), cc.egui_ctx.clone());
++                    // Agent API: window.photocraft gets the same control methods as the
++                    // desktop control server; the app drains the requests every frame.
++                    let (control_tx, control_rx) = std::sync::mpsc::channel();
++                    crate::api::set_sender(control_tx);
++                    if let Err(e) = crate::api::install() {
++                        log::error!("photocraft: agent API unavailable: {e:?}");
++                    }
+                     let (session, warnings) = crate::preset_bridge::session(presets.clone());
+                     preset_warnings.extend(warnings);
+-                    let mut app = PhotocraftApp::new(session, services(inbox.clone()));
++                    let mut app = PhotocraftApp::new(session, services(inbox.clone())).with_control(control_rx);
+                     if !preset_warnings.is_empty() {
+                         photocraft_ui_egui::notices::post(&mut app, i18n::t("Some brush presets could not be loaded"), preset_warnings, true, None);
+                     }
+@@ -299,7 +306,9 @@ impl eframe::App for WebShell {
+             });
+         }
+         self.serve_fonts(ctx);
++        crate::api::set_context(ctx);
+         self.app.logic(ctx, frame);
++        crate::api::poll_replies();
+         self.save_presets(ctx);
+     }
+ 

@@ -243,9 +243,14 @@
     runCommand: function (command, params) { return window.photocraft.execute(command, params || {}); },
     inspect: function () { return window.photocraft.inspect(); },
     image: function () {
-      // {focus:false}: no window to raise in a browser tab.
-      return window.photocraft.screenshot({ focus: false }).then(normalizeImage, function (e) {
-        throw new Error("screenshot failed: " + (e && (e.message || e)));
+      // {focus:false}: no window to raise in a browser tab. eframe's web runner
+      // does not complete ViewportCommand::Screenshot, so the promise would
+      // hang until the relay timeout — race it into a clear error instead.
+      return Promise.race([
+        window.photocraft.screenshot({ focus: false }).then(normalizeImage),
+        new Promise(function (res, rej) { setTimeout(function () { rej(new Error("PhotoCraft's web build cannot capture screenshots yet (eframe web limitation); use inspect")); }, 12000); }),
+      ]).catch(function (e) {
+        throw new Error((e && e.message) ? e.message : "screenshot failed");
       });
     }
   };
