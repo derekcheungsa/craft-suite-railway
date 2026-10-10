@@ -1,8 +1,8 @@
 diff --git a/apps/photocraft-web/Cargo.toml b/apps/photocraft-web/Cargo.toml
-index 6b4c627..17d556f 100644
+index 6b4c627..5ed97da 100644
 --- a/apps/photocraft-web/Cargo.toml
 +++ b/apps/photocraft-web/Cargo.toml
-@@ -32,11 +32,11 @@ log = { workspace = true }
+@@ -32,6 +32,7 @@ log = { workspace = true }
  eframe = { workspace = true, features = ["default_fonts", "wgpu", "accesskit"] }
  rfd = { workspace = true }
  wasm-bindgen = "0.2"
@@ -10,17 +10,12 @@ index 6b4c627..17d556f 100644
  wasm-bindgen-futures = "0.4"
  js-sys = "0.3"
  web-sys = { version = "0.3", features = ["Window", "Document", "Element", "HtmlElement", "HtmlCanvasElement", "HtmlAnchorElement", "Blob", "BlobPropertyBag", "Url", "Location", "CssStyleDeclaration", "Storage", "Event", "EventTarget", "MouseEvent", "PointerEvent", "BeforeUnloadEvent", "AbortController", "AbortSignal", "DomException", "Response", "IdbFactory", "IdbOpenDbRequest", "IdbDatabase", "IdbRequest", "IdbTransaction", "IdbTransactionMode", "IdbObjectStore", "IdbCursor", "IdbCursorWithValue", "RequestInit", "Navigator"] }
- 
- [dev-dependencies]
--serde_json = { workspace = true }
- photocraft-paint = { workspace = true }
- photocraft-psd = { workspace = true }
 diff --git a/apps/photocraft-web/src/api.rs b/apps/photocraft-web/src/api.rs
 new file mode 100644
-index 0000000..19cf18a
+index 0000000..b253553
 --- /dev/null
 +++ b/apps/photocraft-web/src/api.rs
-@@ -0,0 +1,169 @@
+@@ -0,0 +1,192 @@
 +//! `window.photocraft`: the control channel / agent API for the page.
 +//!
 +//! A port of FilmCraft's web api.rs: the same JSON methods as the desktop
@@ -32,10 +27,11 @@ index 0000000..19cf18a
 +//!
 +//! ```js
 +//! await photocraft.execute("layer.new.layer", {})   // engine command → its result
++//! await photocraft.request("document.render", {})   // composite as base64 bytes
 +//! await photocraft.request("ui.inspect")            // control method → its result
 +//! await photocraft.commands()                       // command catalog
-+//! const shot = await photocraft.screenshot()        // ui.screenshot
 +//! photocraft.importBytes("a.png", uint8array)       // deliver a file like a drop
++//! photocraft.files(); await photocraft.readFile("/exports/a.jpg")  // export table
 +//! ```
 +//!
 +//! Results resolve with the method's `result`; errors reject with the message.
@@ -156,15 +152,6 @@ index 0000000..19cf18a
 +    )?;
 +    set_fn(&obj, "commands", Closure::<dyn Fn() -> js_sys::Promise>::new(|| request("engine.commands", json!({}))).into_js_value())?;
 +    set_fn(&obj, "inspect", Closure::<dyn Fn() -> js_sys::Promise>::new(|| request("ui.inspect", json!({}))).into_js_value())?;
-+    set_fn(
-+        &obj,
-+        "screenshot",
-+        Closure::<dyn Fn(JsValue) -> js_sys::Promise>::new(|params: JsValue| {
-+            let p = from_js(&params);
-+            request("ui.screenshot", if p.is_null() { json!({}) } else { p })
-+        })
-+        .into_js_value(),
-+    )?;
 +    // Deliver a file exactly like a drag-and-drop: the app's inbox opens it as
 +    // a document (or preset library) on a following frame. Returns immediately.
 +    set_fn(
@@ -184,6 +171,37 @@ index 0000000..19cf18a
 +                js_sys::Error::new("PhotoCraft is not running yet").into()
 +            }
 +        })
++        .into_js_value(),
++    )?;
++    // The in-memory export table: engine writes that "save a path" land here.
++    set_fn(
++        &obj,
++        "files",
++        Closure::<dyn Fn() -> JsValue>::new(|| {
++            let files: Vec<Value> = photocraft_engine::web_files::list()
++                .into_iter()
++                .map(|(path, size)| json!({"path": path, "size": size, "kind": "export"}))
++                .collect();
++            to_js(&Value::Array(files))
++        })
++        .into_js_value(),
++    )?;
++    set_fn(
++        &obj,
++        "readFile",
++        Closure::<dyn Fn(String) -> js_sys::Promise>::new(|path: String| {
++            let value: JsValue = match photocraft_engine::web_files::read(&path) {
++                Some(bytes) => js_sys::Uint8Array::from(bytes.as_slice()).into(),
++                None => js_sys::Error::new(&format!("{path}: not found in the export table")).into(),
++            };
++            js_sys::Promise::resolve(&value)
++        })
++        .into_js_value(),
++    )?;
++    set_fn(
++        &obj,
++        "removeFile",
++        Closure::<dyn Fn(String) -> JsValue>::new(|path: String| to_js(&json!({"removed": photocraft_engine::web_files::remove(&path)})))
 +        .into_js_value(),
 +    )?;
 +    let w = web_sys::window().ok_or("no window")?;
@@ -262,3 +280,264 @@ index fa78722..198837e 100644
          self.save_presets(ctx);
      }
  
+diff --git a/crates/engine/src/agent_render_cmds.rs b/crates/engine/src/agent_render_cmds.rs
+new file mode 100644
+index 0000000..4fde602
+--- /dev/null
++++ b/crates/engine/src/agent_render_cmds.rs
+@@ -0,0 +1,150 @@
++//! Agent-facing render commands: the composite as bytes, without touching the
++//! document, its history or the view. [`render`](self::render) reuses the
++//! export pipeline (the same flatten Quick Export uses) and answers with
++//! base64, like `swatches.export` without a path; it never captures the screen
++//! or the GPU, so it works in background tabs.
++
++use serde_json::{Value, json};
++
++use crate::commands::CommandSpec;
++use crate::presets::bad;
++use crate::{EngineError, Result, Session};
++
++/// Base64 payloads above this shrink (quality first, then size), as `get_file`
++/// and MCP image content cap at ~1 MB.
++const MAX_B64: usize = 1_000_000;
++
++fn has_doc(s: &Session) -> std::result::Result<(), String> {
++    if s.active().is_some() {
++        Ok(())
++    } else {
++        Err(String::from("no document open"))
++    }
++}
++
++/// `document.render`: the flattened composite of the active document (or one
++/// layer) as encoded bytes, scaled to fit `maxSize` on the long side.
++fn render(s: &mut Session, p: &Value) -> Result<Value> {
++    const CMD: &str = "document.render";
++    if p.get("includeAdjustments").and_then(Value::as_bool) == Some(false) {
++        return Err(bad(CMD, "`includeAdjustments: false` is not supported: renders are always the faithful composite"));
++    }
++    if p.get("region").is_some_and(|v| !v.is_null()) || p.get("scale").is_some_and(|v| !v.is_null()) {
++        return Err(bad(CMD, "`region` and `scale` are not supported yet; use maxSize"));
++    }
++    let format = match p.get("format").and_then(Value::as_str) {
++        Some("png") => "png",
++        Some("jpg") | Some("jpeg") | None => "jpg",
++        Some(f) => return Err(bad(CMD, format!("unknown format `{f}` (jpg|png)"))),
++    };
++    let mut quality = p.get("quality").and_then(Value::as_u64).unwrap_or(80).clamp(1, 100) as u8;
++    let max_size = p.get("maxSize").and_then(Value::as_u64).unwrap_or(1280).clamp(16, 8192) as u32;
++
++    // The document, or just the named layer as a standalone document.
++    let id = if p.get("layer").is_some() {
++        Some(crate::commands::layer_param(s, p)?)
++    } else {
++        None
++    };
++    let d = s.active().ok_or(EngineError::NoDocument)?;
++    let original = match id {
++        Some(id) => crate::layer_menu_cmds::layer_document(&d.doc, id)?,
++        None => (*d.doc).clone(),
++    };
++
++    // Render-and-shrink: quality first, then size. Everything happens on a
++    // scratch session (the app's own resize command), never on the caller's.
++    let original_long = original.size.width.max(original.size.height).max(1);
++    let mut target_long = max_size.min(original_long); // never upscale
++    let name = format!("render.{format}");
++    for _ in 0..8 {
++        let mut doc = original.clone();
++        if target_long < original_long {
++            let mut tmp = Session::new();
++            tmp.add_document(doc, None);
++            let w = (original.size.width as f32 * target_long as f32 / original_long as f32).round().max(1.0);
++            tmp.execute("image.imageSize", json!({"width": w}))?;
++            doc = (*tmp.active().ok_or(EngineError::NoDocument)?.doc).clone();
++        }
++        let opts = photocraft_io::ExportOptions {
++            encode: photocraft_codecs::EncodeOptions { jpeg_quality: quality, ..Default::default() },
++            ..Default::default()
++        };
++        let out = photocraft_io::export(&doc, &name, &opts).map_err(|e| bad(CMD, e.to_string()))?;
++        let b64 = photocraft_paint::tile::b64_encode(&out.bytes);
++        if b64.len() <= MAX_B64 || target_long <= 64 {
++            return Ok(json!({
++                "width": doc.size.width, "height": doc.size.height,
++                "format": format, "quality": if format == "png" { Value::Null } else { json!(quality) },
++                "scaledTo": doc.size.width.max(doc.size.height),
++                "bytes": out.bytes.len(), "warnings": out.warnings, "data": b64,
++            }));
++        }
++        if format == "jpg" && quality > 30 {
++            quality = quality.saturating_sub(20).max(25);
++        } else {
++            target_long = (target_long / 2).max(64);
++            quality = quality.min(60);
++        }
++    }
++    Err(bad(CMD, "could not fit the render under the size cap"))
++}
++
++/// `document.thumbnailGrid`: a coarse average-colour grid of the composite —
++/// one call instead of dozens of `document.sampleColor` round trips.
++fn thumbnail_grid(s: &mut Session, p: &Value) -> Result<Value> {
++    let cols = p.get("cols").and_then(Value::as_u64).unwrap_or(16).clamp(1, 64) as u32;
++    let rows = p.get("rows").and_then(Value::as_u64).unwrap_or(9).clamp(1, 64) as u32;
++    let d = s.active().ok_or(EngineError::NoDocument)?;
++    let img = photocraft_compose::thumbnail(&d.doc, 512);
++    let mut cells = Vec::with_capacity((cols * rows) as usize);
++    for gy in 0..rows {
++        for gx in 0..cols {
++            let x0 = (gx as u64 * img.width as u64 / cols as u64) as usize;
++            let x1 = (((gx + 1) as u64 * img.width as u64 / cols as u64) as usize).max(x0 + 1);
++            let y0 = (gy as u64 * img.height as u64 / rows as u64) as usize;
++            let y1 = (((gy + 1) as u64 * img.height as u64 / rows as u64) as usize).max(y0 + 1);
++            let (mut r, mut g, mut b, mut n) = (0u64, 0u64, 0u64, 0u64);
++            for y in y0..y1.min(img.height as usize) {
++                for x in x0..x1.min(img.width as usize) {
++                    let i = (y * img.width as usize + x) * 4;
++                    r += img.pixels[i] as u64;
++                    g += img.pixels[i + 1] as u64;
++                    b += img.pixels[i + 2] as u64;
++                    n += 1;
++                }
++            }
++            if n == 0 {
++                n = 1;
++            }
++            cells.push(json!([(r / n) as u8, (g / n) as u8, (b / n) as u8]));
++        }
++    }
++    Ok(json!({"cols": cols, "rows": rows, "sample": "average", "cells": cells}))
++}
++
++/// Agent render command specs.
++pub fn specs() -> Vec<CommandSpec> {
++    vec![
++        CommandSpec {
++            id: "document.render",
++            label: "Render Composite (bytes)",
++            menu: &[],
++            shortcut: None,
++            params: r##"{"format":"jpg|png"="jpg","quality":1..100=80,"maxSize":px=1280 (long side; never upscaled),"layer":id? (just that layer)} → {width,height,format,quality,scaledTo,bytes,warnings,data:base64}"##,
++            enabled: has_doc,
++            run: render,
++            journal: false,
++        },
++        CommandSpec {
++            id: "document.thumbnailGrid",
++            label: "Colour Grid",
++            menu: &[],
++            shortcut: None,
++            params: r##"{"cols":1..64=16,"rows":1..64=9,"sample":"average"} → {cols,rows,cells:[[r,g,b],...]}"##,
++            enabled: has_doc,
++            run: thumbnail_grid,
++            journal: false,
++        },
++    ]
++}
+diff --git a/crates/engine/src/commands.rs b/crates/engine/src/commands.rs
+index d82eb8e..28ccf9a 100644
+--- a/crates/engine/src/commands.rs
++++ b/crates/engine/src/commands.rs
+@@ -1092,6 +1092,7 @@ fn build() -> Vec<CommandSpec> {
+             journal: true,
+         });
+     }
++    v.extend(crate::agent_render_cmds::specs());
+     v.extend(crate::layer_style::specs());
+     v.extend(crate::filters::specs());
+     v.extend(crate::filters_ext::specs());
+diff --git a/crates/engine/src/file_cmds.rs b/crates/engine/src/file_cmds.rs
+index 3883e25..0a209d9 100644
+--- a/crates/engine/src/file_cmds.rs
++++ b/crates/engine/src/file_cmds.rs
+@@ -92,8 +92,11 @@ pub(crate) fn write_file(path: &str, bytes: &[u8]) -> Result<()> {
+     photocraft_format::atomic_write(std::path::Path::new(path), bytes).map_err(|e| EngineError::Other(e.to_string()))
+ }
+ #[cfg(target_arch = "wasm32")]
+-pub(crate) fn write_file(path: &str, _bytes: &[u8]) -> Result<()> {
+-    Err(EngineError::Other(format!("cannot write {path}: no file system on the web")))
++pub(crate) fn write_file(path: &str, bytes: &[u8]) -> Result<()> {
++    // No file system in the browser: exports land in the in-memory table the
++    // agent API reads (window.photocraft.files / readFile).
++    crate::web_files::store(path, bytes);
++    Ok(())
+ }
+ 
+ /// Files of a folder that look like images we can open, sorted by name.
+diff --git a/crates/engine/src/lib.rs b/crates/engine/src/lib.rs
+index c135711..1779ec6 100644
+--- a/crates/engine/src/lib.rs
++++ b/crates/engine/src/lib.rs
+@@ -8,6 +8,7 @@
+ #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
+ 
+ pub mod actions_cmds;
++pub mod agent_render_cmds;
+ pub mod adjust_cmds;
+ pub mod adjust_params;
+ pub mod align_cmds;
+@@ -77,6 +78,7 @@ pub mod print_cmds;
+ pub mod proof_sim;
+ pub mod redeye_cmds;
+ pub mod render_cmds;
++pub mod web_files;
+ pub mod retouch_cmds;
+ pub mod sample_cmds;
+ pub mod select_extra_cmds;
+diff --git a/crates/engine/src/web_files.rs b/crates/engine/src/web_files.rs
+new file mode 100644
+index 0000000..2493616
+--- /dev/null
++++ b/crates/engine/src/web_files.rs
+@@ -0,0 +1,49 @@
++//! An in-memory file table for the web build: engine exports that "write a
++//! path" land here (there is no file system in the browser), and the page's
++//! agent API (`window.photocraft.files` / `readFile`) reads them back so the
++//! MCP bridge can `get_file` / `send_file` them.
++
++use std::cell::RefCell;
++
++thread_local! {
++    static FILES: RefCell<Vec<(String, Vec<u8>)>> = const { RefCell::new(Vec::new()) };
++}
++
++/// Keep the table bounded: newest writes win, oldest entries drop off.
++const MAX_ENTRIES: usize = 32;
++const MAX_TOTAL_BYTES: usize = 256 * 1024 * 1024;
++
++/// Store `bytes` at `path`, replacing any earlier file with the same path.
++pub fn store(path: &str, bytes: &[u8]) {
++    FILES.with(|f| {
++        let mut f = f.borrow_mut();
++        f.retain(|(p, _)| p != path);
++        f.push((path.to_string(), bytes.to_vec()));
++        while f.len() > MAX_ENTRIES {
++            f.remove(0);
++        }
++        while f.iter().map(|(_, b)| b.len()).sum::<usize>() > MAX_TOTAL_BYTES && f.len() > 1 {
++            f.remove(0);
++        }
++    });
++}
++
++/// `(path, size)` for every stored file, newest last.
++pub fn list() -> Vec<(String, usize)> {
++    FILES.with(|f| f.borrow().iter().map(|(p, b)| (p.clone(), b.len())).collect())
++}
++
++/// The bytes stored at `path`, if any.
++pub fn read(path: &str) -> Option<Vec<u8>> {
++    FILES.with(|f| f.borrow().iter().find(|(p, _)| p == path).map(|(_, b)| b.clone()))
++}
++
++/// Drop `path`; whether it existed.
++pub fn remove(path: &str) -> bool {
++    FILES.with(|f| {
++        let mut f = f.borrow_mut();
++        let before = f.len();
++        f.retain(|(p, _)| p != path);
++        f.len() != before
++    })
++}
