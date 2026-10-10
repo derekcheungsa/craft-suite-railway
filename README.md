@@ -71,8 +71,10 @@ page opens a WebSocket back to the relay (nothing connects until you click
 **Tools:** `list_sessions`, `list_commands`, `run_command`, `run_batch` (≤20),
 `inspect`, `get_image` (≤1 MB previews), `list_files`, `get_file` (small files
 as base64+sha256), `send_file` (upload a file from the app to a URL you supply —
-large media never enters the conversation; enables the export → transcribe →
-import loop). Verified adapters: LightCraft v0.4 (`lightcraft.command`),
+large media never enters the conversation), `put_file` (import INTO the app from
+base64 or a URL the page fetches — generated images become documents/media;
+PhotoCraft and FilmCraft and EffectCraft). Together they close the loop: export
+→ send_file → transcribe/edit → put_file back in. Verified adapters: LightCraft v0.4 (`lightcraft.command`),
 EffectCraft v0.6 (`execute/commands/inspect/renderFrame`), FilmCraft via a
 build of `main` (`window.filmcraft`, 675 commands — `FILMCRAFT_URL` until
 upstream tags it), and PhotoCraft via a minimal fork of `main@9c427a7` that
