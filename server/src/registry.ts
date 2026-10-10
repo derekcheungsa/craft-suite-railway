@@ -107,7 +107,15 @@ export class TabRegistry {
     clearTimeout(p.timer);
     const ms = Date.now() - p.startedAt;
     if (ok) p.resolve(payload);
-    else p.reject(new Error(typeof payload === "string" ? payload : JSON.stringify(payload ?? "bridge error")));
+    else {
+      let msg = typeof payload === "string" ? payload : JSON.stringify(payload ?? "bridge error");
+      // An old bridge (cached in a long-lived tab, e.g. FilmCraft's service
+      // worker) predates newer tools: turn its bare refusal into the fix.
+      if (/^unknown tool /.test(msg)) {
+        msg += " — this tab is running an OLD bridge: hard-reload the app tab (Ctrl/Cmd+Shift+R) and reconnect";
+      }
+      p.reject(new Error(msg));
+    }
     return ms;
   }
 
