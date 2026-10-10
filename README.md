@@ -93,4 +93,17 @@ destructive-command denylist, in-page read-only toggle and Disconnect,
 in relay logs. While connected, an agent can run commands in that tab only —
 the page shows a persistent indicator.
 
+**The one-pipeline pattern for agents** (verified end to end):
+
+1. Generate/host an image, then `put_file` its **URL** (the page fetches it —
+   bytes never enter the conversation; URL must send CORS headers, e.g.
+   raw.githubusercontent.com). A **local file** is read by the agent itself and
+   passed as `base64`. Works in PhotoCraft, FilmCraft, EffectCraft.
+2. Edit: `run_command` / `run_batch` (PhotoCraft: `document.render`-backed
+   `get_image`, `document.thumbnailGrid` for coarse colour checks).
+3. Check: `get_image` returns the flattened composite as an image.
+4. Export: `run_command layer.exportAs {path}` (or any export command) — lands
+   in the in-app file table.
+5. Retrieve: `get_file` (small) or `send_file` to a URL you control (large).
+
 See `docs/PRD-Craft-Relay.pdf` for the design document.
