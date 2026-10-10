@@ -62,12 +62,14 @@ RUN find /site -type f \( -name '*.wasm' -o -name '*.js' -o -name '*.html' \) \
 # ---- Stage 2: nginx serving the six apps + portal ----
 FROM nginx:1.27-alpine
 
-# Port nginx listens on, and the internal address of craft-relay that the
-# same-origin /relay/ proxy forwards to (Railway private networking; the
-# platform injects PORT=8080 into the relay container).
+# Port nginx listens on, plus the relay proxy's upstream (host:port on
+# Railway private networking — the platform injects PORT=8080 into the relay
+# container) and the DNS resolver used to re-resolve it per request.
 ENV PORT=8080
-ARG RELAY_UPSTREAM="http://craft-relay.railway.internal:8080"
+ARG RELAY_UPSTREAM="craft-relay.railway.internal:8080"
 ENV RELAY_UPSTREAM=${RELAY_UPSTREAM}
+ARG RESOLVER="[fd12::10]"
+ENV RESOLVER=${RESOLVER}
 
 COPY nginx/templates/default.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=fetch /site /usr/share/nginx/html

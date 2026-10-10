@@ -88,10 +88,14 @@ server {
     # --- Same-origin relay proxy: the in-page bridge connects to
     # --- ${RELAY_UPSTREAM} (Railway private networking), so a relative
     # --- RELAY_URL "/relay" works on every deployment without knowing the
-    # --- relay's public domain in advance. Handles plain HTTP and the
-    # --- /bridge WebSocket upgrade.
+    # --- relay's public domain in advance. Service IPs change on every
+    # --- redeploy, so the hostname is re-resolved per request via
+    # --- ${RESOLVER} instead of being cached at nginx startup.
     location /relay/ {
-        proxy_pass ${RELAY_UPSTREAM}/;
+        resolver ${RESOLVER} valid=10s ipv6=off;
+        set $relay_upstream ${RELAY_UPSTREAM};
+        rewrite ^/relay/(.*)$ /$1 break;
+        proxy_pass http://$relay_upstream;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
