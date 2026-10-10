@@ -335,7 +335,8 @@
     detect: function () { return typeof window.pdfcraft === "object" && typeof window.pdfcraft.request === "function"; },
     readOnlyCommands: ["ui.state", "ui.commands", "ui.inspect", "ui.screenshot"],
     listCommands: function (filter) {
-      return window.pdfcraft.commands().then(function (cmds) {
+      return window.pdfcraft.commands().then(function (wrapped) {
+        var cmds = wrapped && wrapped.commands instanceof Array ? wrapped.commands : wrapped;
         var f = (filter || "").toLowerCase();
         if (!f) return cmds;
         return cmds instanceof Array
