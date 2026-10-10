@@ -69,13 +69,17 @@ page opens a WebSocket back to the relay (nothing connects until you click
    paste the `BRIDGE_TOKEN`, Connect. Ask Claude: *"What tabs are connected?"*
 
 **Tools:** `list_sessions`, `list_commands`, `run_command`, `run_batch` (≤20),
-`inspect`, `get_image` (≤1 MB previews). Verified adapters: LightCraft v0.4
-(`lightcraft.command`), EffectCraft v0.6 (`execute/commands/inspect/renderFrame`),
-and FilmCraft via an unmodified build of `main` (`window.filmcraft`, 675 commands —
-`execute/commands/inspect/screenshot`), served through `FILMCRAFT_URL` until
-upstream ships the API in a tagged release (then drop the override and bump
-`FILMCRAFT_VERSION`). PdfCraft/VectorCraft/PhotoCraft web builds expose no
-in-page agent API yet (checked 2026-10).
+`inspect`, `get_image` (≤1 MB previews), `list_files`, `get_file` (small files
+as base64+sha256), `send_file` (upload a file from the app to a URL you supply —
+large media never enters the conversation; enables the export → transcribe →
+import loop). Verified adapters: LightCraft v0.4 (`lightcraft.command`),
+EffectCraft v0.6 (`execute/commands/inspect/renderFrame`), FilmCraft via a
+build of `main` (`window.filmcraft`, 675 commands — `FILMCRAFT_URL` until
+upstream tags it), and PhotoCraft via a minimal fork of `main@9c427a7` that
+installs `window.photocraft` (851 commands; patch in
+`docs/photocraft-agent-api.patch`, PR candidate). PhotoCraft screenshots are
+not supported by eframe's web runner — `get_image` there returns a clear error.
+PdfCraft/VectorCraft web builds expose no in-page agent API yet (checked 2026-10).
 
 **Note on EffectCraft and FilmCraft:** both engines answer agent requests on
 their UI frame loop. Keep the tab visible and the app running; in a fully
