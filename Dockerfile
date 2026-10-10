@@ -5,17 +5,17 @@
 # ${repo}-web-${VER}.zip per upstream packaging convention.
 FROM alpine:3.20 AS fetch
 
-ARG PHOTOCRAFT_VERSION=0.5.0
+ARG PHOTOCRAFT_VERSION=0.5.0-main4
 ARG LIGHTCRAFT_VERSION=0.4.0
 ARG PDFCRAFT_VERSION=0.4.0
 ARG VECTORCRAFT_VERSION=0.7.0
-ARG FILMCRAFT_VERSION=0.4.0
+ARG FILMCRAFT_VERSION=0.4.0-main
 ARG EFFECTCRAFT_VERSION=0.6.0
-# Optional: serve a custom FilmCraft web build instead of the upstream release
-# (e.g. a build from main that ships the window.filmcraft agent API).
-ARG FILMCRAFT_URL=""
-# Optional: custom PhotoCraft web build (the fork that installs window.photocraft).
-ARG PHOTOCRAFT_URL=""
+# The FilmCraft and PhotoCraft web builds that ship the in-page agent APIs
+# (window.filmcraft / window.photocraft) are published from this repo, not
+# upstream — they carry a "-main" version suffix and a commit-tagged asset.
+ARG FILMCRAFT_URL="https://github.com/derekcheungsa/craft-suite-railway/releases/download/filmcraft-web-0.4.0-main-7b6c134/filmcraft-web-0.4.0-main.zip"
+ARG PHOTOCRAFT_URL="https://github.com/derekcheungsa/craft-suite-railway/releases/download/photocraft-web-0.5.0-main4-0c72d95/photocraft-web-0.5.0-main4.zip"
 
 RUN apk add --no-cache curl unzip gzip
 WORKDIR /site
@@ -63,9 +63,10 @@ RUN find /site -type f \( -name '*.wasm' -o -name '*.js' -o -name '*.html' \) \
 FROM nginx:1.27-alpine
 
 # Port nginx listens on, and the internal address of craft-relay that the
-# same-origin /relay/ proxy forwards to (Railway private networking).
+# same-origin /relay/ proxy forwards to (Railway private networking; the
+# platform injects PORT=8080 into the relay container).
 ENV PORT=8080
-ARG RELAY_UPSTREAM="http://craft-relay.railway.internal:8091"
+ARG RELAY_UPSTREAM="http://craft-relay.railway.internal:8080"
 ENV RELAY_UPSTREAM=${RELAY_UPSTREAM}
 
 COPY nginx/templates/default.conf.template /etc/nginx/templates/default.conf.template

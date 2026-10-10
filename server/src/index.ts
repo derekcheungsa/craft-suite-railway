@@ -7,10 +7,10 @@ import { Denylist } from "./denylist.js";
 import { buildServer } from "./tools.js";
 
 // ---------- configuration ----------
-const PORT = parseInt(process.env.PORT ?? "8091", 10);
+const PORT = parseInt(process.env.PORT ?? "8080", 10);
 const MCP_TOKEN = process.env.MCP_TOKEN ?? "";
 const BRIDGE_TOKEN = process.env.BRIDGE_TOKEN ?? "";
-const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS ?? "")
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS ?? "*")
   .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
 const CALL_TIMEOUT_MS = parseInt(process.env.CALL_TIMEOUT_MS ?? "20000", 10);
 const DENYLIST_EXTRA = process.env.DENYLIST ?? "";
