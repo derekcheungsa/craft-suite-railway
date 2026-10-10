@@ -7,15 +7,17 @@ FROM alpine:3.20 AS fetch
 
 ARG PHOTOCRAFT_VERSION=0.5.0-main4
 ARG LIGHTCRAFT_VERSION=0.4.0
-ARG PDFCRAFT_VERSION=0.4.0
+ARG PDFCRAFT_VERSION=0.5.0-main
 ARG VECTORCRAFT_VERSION=0.7.0
 ARG FILMCRAFT_VERSION=0.4.0-main
 ARG EFFECTCRAFT_VERSION=0.6.0
-# The FilmCraft and PhotoCraft web builds that ship the in-page agent APIs
-# (window.filmcraft / window.photocraft) are published from this repo, not
-# upstream — they carry a "-main" version suffix and a commit-tagged asset.
+# The FilmCraft, PhotoCraft and PdfCraft web builds that ship the in-page
+# agent APIs (window.filmcraft / window.photocraft / window.pdfcraft) are
+# published from this repo, not upstream — they carry a "-main" version
+# suffix and a commit-tagged asset.
 ARG FILMCRAFT_URL="https://github.com/derekcheungsa/craft-suite-railway/releases/download/filmcraft-web-0.4.0-main-7b6c134/filmcraft-web-0.4.0-main.zip"
 ARG PHOTOCRAFT_URL="https://github.com/derekcheungsa/craft-suite-railway/releases/download/photocraft-web-0.5.0-main4-0c72d95/photocraft-web-0.5.0-main4.zip"
+ARG PDFCRAFT_URL="https://github.com/derekcheungsa/craft-suite-railway/releases/download/pdfcraft-web-0.5.0-main-87b66ec/pdfcraft-web-0.5.0-main.zip"
 
 RUN apk add --no-cache curl unzip gzip
 WORKDIR /site
@@ -33,7 +35,7 @@ RUN set -eux; \
     }; \
     fetch photocraft  "${PHOTOCRAFT_VERSION}" "${PHOTOCRAFT_URL}"; \
     fetch lightcraft  "${LIGHTCRAFT_VERSION}"; \
-    fetch pdfcraft    "${PDFCRAFT_VERSION}"; \
+    fetch pdfcraft    "${PDFCRAFT_VERSION}" "${PDFCRAFT_URL}"; \
     fetch vectorcraft "${VECTORCRAFT_VERSION}"; \
     fetch filmcraft   "${FILMCRAFT_VERSION}" "${FILMCRAFT_URL}"; \
     fetch effectcraft "${EFFECTCRAFT_VERSION}"; \

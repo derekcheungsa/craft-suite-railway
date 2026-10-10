@@ -6,7 +6,7 @@
 const DEFAULT_PATTERNS = [
   // cross-app: quit / close / delete / wipe anything
   "app.quit", "quit",
-  "project.close", "document.close", "close.project",
+  "project.close", "document.close", "close.project", "file.close",
   "library.delete", "delete.library", "photo.delete", "photos.delete",
   "library.wipe", "library.clear", "catalog.delete",
   "file.delete", "delete.file",

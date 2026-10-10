@@ -53,7 +53,7 @@
   /* Denylist — local copy of the relay's patterns: defense in depth (the
    * page's read-only mode and the relay both re-check). */
   var DENY = [
-    "app.quit", "quit", "project.close", "document.close", "close.project",
+    "app.quit", "quit", "project.close", "document.close", "close.project", "file.close",
     "library.delete", "delete.library", "photo.delete", "photos.delete",
     "library.wipe", "library.clear", "catalog.delete", "file.delete",
     "history.clear", "undo.all", "library.remove", "reject.delete",
@@ -76,7 +76,7 @@
       if (s.length > 1000) return { mime: "image/png", base64: s };
       throw new Error("image call returned unexpected text: " + s.slice(0, 120));
     }
-    var b = result.base64 || result.pngBase64 || result.png || result.data || (result.image && result.image.base64);
+    var b = result.base64 || result.pngBase64 || result.png_base64 || result.png || result.data || (result.image && result.image.base64);
     if (!b) throw new Error("image call returned no image field: " + JSON.stringify(result).slice(0, 200));
     return { mime: result.mime || result.mimeType || result.contentType || "image/png", base64: b };
   }
@@ -319,6 +319,58 @@
         });
       }
       return deliver(args.name, window.CraftRelayFileKit.fromBase64(args.base64));
+    }
+  };
+
+  /* ---------------- PdfCraft ----------------
+   * In-page API (our fork of main, via PDFCRAFT_URL; stock builds have no
+   * in-page API — detect() simply never fires there): window.pdfcraft — the
+   * app's own M3.9 control channel (ui.state / ui.inspect / ui.click /
+   * ui.command / ui.screenshot, …) as promises, plus the agent file table:
+   * every save and export is kept in memory for list/read/upload. Requests
+   * are answered on the UI frame loop like the other craft apps. */
+  adapters.pdfcraft = {
+    app: "pdfcraft",
+    versions: ["0.5"],
+    detect: function () { return typeof window.pdfcraft === "object" && typeof window.pdfcraft.request === "function"; },
+    readOnlyCommands: ["ui.state", "ui.commands", "ui.inspect", "ui.screenshot"],
+    listCommands: function (filter) {
+      return window.pdfcraft.commands().then(function (cmds) {
+        var f = (filter || "").toLowerCase();
+        if (!f) return cmds;
+        return cmds instanceof Array
+          ? cmds.filter(function (c) { return JSON.stringify(c).toLowerCase().indexOf(f) !== -1; })
+          : { note: "catalog not an array; raw follows", raw: cmds, filter: filter };
+      });
+    },
+    runCommand: function (command, params) {
+      // Registry commands run as the menu would (no params); the ui.* control
+      // methods take a params object (ui.click {id} / {x,y}, ui.set {key,value}…).
+      if (/^ui\./.test(command)) return window.pdfcraft.request(command, params || {});
+      return window.pdfcraft.execute(command);
+    },
+    inspect: function () { return window.pdfcraft.state(); },
+    image: function () {
+      return window.pdfcraft.screenshot({}).then(normalizeImage, function (e) {
+        throw new Error("screenshot failed: " + (e && (e.message || e)));
+      });
+    },
+    listFiles: function () { return window.pdfcraft.files(); },
+    file: function (path) {
+      return window.pdfcraft.readFile(path).then(function (bytes) {
+        if (bytes && bytes instanceof Error) throw bytes;
+        if (!bytes) throw new Error(path + ": not found");
+        return bytes;
+      });
+    },
+    sendFile: function (path, url, method) {
+      return uploadBytes(function (p) { return window.pdfcraft.readFile(p); }, path, url, method);
+    },
+    importFile: function (args) {
+      // importUrl fetches in the page (CORS-enabled URLs); openBytes delivers
+      // base64 through the same inbox as ?file= (opens as a document).
+      if (args.url) return window.pdfcraft.importUrl(args.url, args.name || undefined);
+      return window.pdfcraft.openBytes(args.name, window.CraftRelayFileKit.fromBase64(args.base64));
     }
   };
 

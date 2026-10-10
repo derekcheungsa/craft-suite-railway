@@ -1,0 +1,418 @@
+diff --git a/apps/pdfcraft-web/Cargo.toml b/apps/pdfcraft-web/Cargo.toml
+index a8d472d..1b1e957 100644
+--- a/apps/pdfcraft-web/Cargo.toml
++++ b/apps/pdfcraft-web/Cargo.toml
+@@ -15,6 +15,8 @@ eframe = { workspace = true, features = ["default_fonts", "glow", "persistence",
+ egui = { workspace = true }
+ 
+ [target.'cfg(target_arch = "wasm32")'.dependencies]
++wasm-bindgen = "0.2"
+ wasm-bindgen-futures = "0.4"
+-web-sys = { version = "0.3", features = ["Window", "Document", "Element", "HtmlCanvasElement", "HtmlElement", "Location", "Url", "UrlSearchParams", "Response"] }
++serde_json = { workspace = true }
++web-sys = { version = "0.3", features = ["Window", "Document", "Element", "HtmlCanvasElement", "HtmlElement", "Location", "Url", "UrlSearchParams", "Response", "File", "FileList"] }
+ js-sys = "0.3"
+diff --git a/apps/pdfcraft-web/src/api.rs b/apps/pdfcraft-web/src/api.rs
+new file mode 100644
+index 0000000..0b31d7a
+--- /dev/null
++++ b/apps/pdfcraft-web/src/api.rs
+@@ -0,0 +1,297 @@
++//! `window.pdfcraft`: the app's own control channel (M3.9) exposed to JavaScript.
++//!
++//! The same JSON methods as the desktop `--control` transport (`crates/ui-egui/src/control.rs`),
++//! as promises, plus the web file conveniences the other craft apps' agent APIs have:
++//!
++//! ```js
++//! await pdfcraft.request("ui.state")                 // any control method
++//! await pdfcraft.execute("file.save-as")             // registry command, as the menu runs it
++//! await pdfcraft.commands()                          // the command list
++//! await pdfcraft.inspect({ query: "page" })          // AccessKit widget tree
++//! const { png_base64 } = await pdfcraft.screenshot() // the window as PNG (base64)
++//! await pdfcraft.importUrl("/doc.pdf")               // fetch + open (CORS-enabled URLs)
++//! await pdfcraft.importFiles(input.files)            // File / FileList / File[]
++//! pdfcraft.files(); await pdfcraft.readFile("a.pdf") // exports, kept in the agent file table
++//! ```
++//!
++//! Requests are answered on the app's frame loop; replies resolve the promises from a
++//! per-frame plugin hook. Errors reject with an `Error` whose `message` is the channel's text.
++
++use std::cell::RefCell;
++use std::sync::mpsc::{Receiver, TryRecvError};
++
++use pdfcraft_ui_egui::control::ControlClient;
++use pdfcraft_ui_egui::{Inbox, agent_files};
++use serde_json::{Value, json};
++use wasm_bindgen::JsCast;
++use wasm_bindgen::prelude::*;
++use wasm_bindgen_futures::{JsFuture, future_to_promise};
++
++type Waiting = (Receiver<Result<Value, String>>, js_sys::Function, js_sys::Function);
++
++thread_local! {
++    static CLIENT: RefCell<Option<ControlClient>> = const { RefCell::new(None) };
++    static CTX: RefCell<Option<egui::Context>> = const { RefCell::new(None) };
++    static INBOX: RefCell<Option<Inbox>> = const { RefCell::new(None) };
++    static WAITING: RefCell<Vec<Waiting>> = const { RefCell::new(Vec::new()) };
++}
++
++fn repaint() {
++    CTX.with(|c| {
++        if let Some(ctx) = c.borrow().as_ref() {
++            ctx.request_repaint();
++        }
++    });
++}
++
++pub fn to_js(v: &Value) -> JsValue {
++    js_sys::JSON::parse(&v.to_string()).unwrap_or(JsValue::NULL)
++}
++
++fn from_js(v: &JsValue) -> Value {
++    if v.is_undefined() || v.is_null() {
++        return Value::Null;
++    }
++    js_sys::JSON::stringify(v).ok().and_then(|s| s.as_string()).and_then(|s| serde_json::from_str(&s).ok()).unwrap_or(Value::Null)
++}
++
++/// Resolve the promises of answered requests. Called every frame, before the app's `logic`,
++/// by [`Poll`] — the channel answers during `logic`, so a reply lands one frame later.
++fn poll_replies() {
++    let still_waiting = WAITING.with(|w| {
++        w.borrow_mut().retain(|(rx, resolve, reject)| match rx.try_recv() {
++            Ok(Ok(v)) => {
++                let _ = resolve.call1(&JsValue::NULL, &to_js(&v));
++                false
++            }
++            Ok(Err(msg)) => {
++                let _ = reject.call1(&JsValue::NULL, &js_sys::Error::new(&msg));
++                false
++            }
++            Err(TryRecvError::Empty) => true,
++            Err(TryRecvError::Disconnected) => {
++                let _ = reject.call1(&JsValue::NULL, &js_sys::Error::new("the app has closed"));
++                false
++            }
++        });
++        w.borrow().len()
++    });
++    if still_waiting > 0 {
++        repaint();
++    }
++}
++
++/// The per-frame hook that resolves request promises.
++struct Poll;
++
++impl egui::Plugin for Poll {
++    fn debug_name(&self) -> &'static str {
++        "pdfcraft-agent-api"
++    }
++
++    fn input_hook(&mut self, _ctx: &egui::Context, _input: &mut egui::RawInput) {
++        poll_replies();
++    }
++}
++
++/// Send a control request; the promise settles when the app answers it on its frame loop.
++pub fn request(method: &str, params: Value) -> js_sys::Promise {
++    let p = js_sys::Promise::new(&mut |resolve, reject| {
++        let sent = CLIENT.with(|c| {
++            c.borrow().as_ref().map(|client| {
++                let rx = client.send(method, params.clone());
++                WAITING.with(|w| w.borrow_mut().push((rx, resolve.clone(), reject.clone())));
++                true
++            }).unwrap_or(false)
++        });
++        if !sent {
++            let _ = reject.call1(&JsValue::NULL, &js_sys::Error::new("PdfCraft is not running yet"));
++        }
++    });
++    repaint();
++    p
++}
++
++fn set_fn(obj: &js_sys::Object, name: &str, f: JsValue) -> Result<(), JsValue> {
++    js_sys::Reflect::set(obj, &name.into(), &f).map(|_| ())
++}
++
++fn push_inbox(name: &str, bytes: &[u8]) {
++    INBOX.with(|c| {
++        if let Some(inbox) = c.borrow().as_ref() {
++            inbox.lock().unwrap_or_else(|e| e.into_inner()).push((name.to_string(), bytes.to_vec()));
++        }
++    });
++    repaint();
++}
++
++fn files_of(v: &JsValue) -> Vec<web_sys::File> {
++    if let Some(f) = v.dyn_ref::<web_sys::File>() {
++        return vec![f.clone()];
++    }
++    if let Some(list) = v.dyn_ref::<web_sys::FileList>() {
++        return (0..list.length()).filter_map(|i| list.get(i)).collect();
++    }
++    if js_sys::Array::is_array(v) {
++        return js_sys::Array::from(v).iter().filter_map(|x| x.dyn_into::<web_sys::File>().ok()).collect();
++    }
++    Vec::new()
++}
++
++async fn file_bytes(f: &web_sys::File) -> Result<Vec<u8>, JsValue> {
++    let buf: wasm_bindgen::JsValue = JsFuture::from(f.array_buffer()).await?;
++    Ok(js_sys::Uint8Array::new(&buf).to_vec())
++}
++
++async fn fetch_bytes(url: &str, name: Option<String>) -> Result<(String, Vec<u8>), JsValue> {
++    let w = web_sys::window().ok_or_else(|| JsValue::from_str("no window"))?;
++    let resp: web_sys::Response = JsFuture::from(w.fetch_with_str(url)).await?.dyn_into().map_err(|_| JsValue::from_str("not a response"))?;
++    if !resp.ok() {
++        return Err(JsValue::from_str(&format!("{url}: HTTP {}", resp.status())));
++    }
++    let buf: wasm_bindgen::JsValue = JsFuture::from(resp.array_buffer().map_err(|e| JsValue::from(e))?).await?;
++    let bytes = js_sys::Uint8Array::new(&buf).to_vec();
++    let name = name.unwrap_or_else(|| {
++        url.split(['?', '#']).next().unwrap_or(url).rsplit('/').next().unwrap_or("document.pdf").to_string()
++    });
++    Ok((name, bytes))
++}
++
++/// Install `window.pdfcraft`.
++pub fn install(client: ControlClient, ctx: egui::Context, inbox: Inbox) -> Result<(), JsValue> {
++    ctx.add_plugin(Poll);
++    CLIENT.with(|c| *c.borrow_mut() = Some(client));
++    CTX.with(|c| *c.borrow_mut() = Some(ctx));
++    INBOX.with(|c| *c.borrow_mut() = Some(inbox));
++
++    let obj = js_sys::Object::new();
++    set_fn(
++        &obj,
++        "request",
++        Closure::<dyn Fn(String, JsValue) -> js_sys::Promise>::new(|method: String, params: JsValue| {
++            let p = from_js(&params);
++            request(&method, if p.is_null() { json!({}) } else { p })
++        })
++        .into_js_value(),
++    )?;
++    set_fn(
++        &obj,
++        "execute",
++        Closure::<dyn Fn(String) -> js_sys::Promise>::new(|command: String| request("ui.command", json!({ "id": command }))).into_js_value(),
++    )?;
++    set_fn(&obj, "commands", Closure::<dyn Fn() -> js_sys::Promise>::new(|| request("ui.commands", json!({}))).into_js_value())?;
++    set_fn(&obj, "state", Closure::<dyn Fn() -> js_sys::Promise>::new(|| request("ui.state", json!({}))).into_js_value())?;
++    set_fn(
++        &obj,
++        "inspect",
++        Closure::<dyn Fn(JsValue) -> js_sys::Promise>::new(|params: JsValue| {
++            let p = from_js(&params);
++            request("ui.inspect", if p.is_null() { json!({}) } else { p })
++        })
++        .into_js_value(),
++    )?;
++    set_fn(
++        &obj,
++        "screenshot",
++        Closure::<dyn Fn(JsValue) -> js_sys::Promise>::new(|params: JsValue| {
++            let p = from_js(&params);
++            request("ui.screenshot", if p.is_null() { json!({}) } else { p })
++        })
++        .into_js_value(),
++    )?;
++    set_fn(
++        &obj,
++        "set",
++        Closure::<dyn Fn(String, JsValue) -> js_sys::Promise>::new(|key: String, value: JsValue| {
++            let v = from_js(&value);
++            request("ui.set", json!({ "key": key, "value": if v.is_null() { Value::String(String::new()) } else { v } }))
++        })
++        .into_js_value(),
++    )?;
++    set_fn(
++        &obj,
++        "openBytes",
++        Closure::<dyn Fn(String, js_sys::Uint8Array) -> js_sys::Promise>::new(|name: String, bytes: js_sys::Uint8Array| {
++            push_inbox(&name, &bytes.to_vec());
++            js_sys::Promise::resolve(&JsValue::TRUE)
++        })
++        .into_js_value(),
++    )?;
++    set_fn(
++        &obj,
++        "importFiles",
++        Closure::<dyn Fn(JsValue) -> js_sys::Promise>::new(|files: JsValue| {
++            let files = files_of(&files);
++            future_to_promise(async move {
++                let mut opened = 0usize;
++                for f in &files {
++                    match file_bytes(f).await {
++                        Ok(bytes) => {
++                            let name = f.name();
++                            push_inbox(&name, &bytes);
++                            opened += 1;
++                        }
++                        Err(e) => return Err(e),
++                    }
++                }
++                Ok(js_sys::Number::from(opened as f64).into())
++            })
++        })
++        .into_js_value(),
++    )?;
++    set_fn(
++        &obj,
++        "importUrl",
++        Closure::<dyn Fn(String, JsValue) -> js_sys::Promise>::new(|url: String, name: JsValue| {
++            let name = name.as_string();
++            future_to_promise(async move {
++                let (name, bytes) = fetch_bytes(&url, name).await?;
++                push_inbox(&name, &bytes);
++                Ok(js_sys::Number::from(1f64).into())
++            })
++        })
++        .into_js_value(),
++    )?;
++    set_fn(
++        &obj,
++        "files",
++        Closure::<dyn Fn() -> JsValue>::new(|| {
++            to_js(&Value::Array(agent_files::list().into_iter().map(|(name, size)| json!({ "path": name, "size": size })).collect()))
++        })
++        .into_js_value(),
++    )?;
++    set_fn(
++        &obj,
++        "readFile",
++        Closure::<dyn Fn(String) -> js_sys::Promise>::new(|path: String| {
++            future_to_promise(async move {
++                match agent_files::read(&path) {
++                    Some(bytes) => Ok(js_sys::Uint8Array::from(bytes.as_slice()).into()),
++                    None => Err(js_sys::Error::new(&format!("{path}: not found")).into()),
++                }
++            })
++        })
++        .into_js_value(),
++    )?;
++    set_fn(
++        &obj,
++        "removeFile",
++        Closure::<dyn Fn(String) -> JsValue>::new(|path: String| JsValue::from(agent_files::remove(&path))).into_js_value(),
++    )?;
++    set_fn(
++        &obj,
++        "info",
++        Closure::<dyn Fn() -> JsValue>::new(|| {
++            to_js(&json!({
++                "app": "pdfcraft",
++                "version": env!("CARGO_PKG_VERSION"),
++                "api": "ui-control",
++                "methods": ["ui.state", "ui.inspect", "ui.click", "ui.move", "ui.drag", "ui.type", "ui.key", "ui.command", "ui.commands", "ui.set", "ui.screenshot"],
++            }))
++        })
++        .into_js_value(),
++    )?;
++    let w = web_sys::window().ok_or(JsValue::from_str("no window"))?;
++    js_sys::Reflect::set(&w, &"pdfcraft".into(), &obj)?;
++    Ok(())
++}
+diff --git a/apps/pdfcraft-web/src/main.rs b/apps/pdfcraft-web/src/main.rs
+index 1899c29..2a40a76 100644
+--- a/apps/pdfcraft-web/src/main.rs
++++ b/apps/pdfcraft-web/src/main.rs
+@@ -3,6 +3,8 @@
+ 
+ #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
+ 
++mod api;
++
+ #[cfg(target_arch = "wasm32")]
+ fn main() {
+     use eframe::wasm_bindgen::JsCast;
+@@ -51,6 +53,12 @@ fn main() {
+                             ctx.request_repaint();
+                         });
+                     }
++                    // The agent API: the app's own control channel (opt-in on desktop via
++                    // `--control`) exposed to JavaScript as window.pdfcraft.
++                    let client = app.attach_control(&cc.egui_ctx);
++                    if let Err(e) = api::install(client, cc.egui_ctx.clone(), app.startup_inbox.clone()) {
++                        eframe::web_sys::console::error_1(&format!("PdfCraft: could not install the agent API: {e:?}").into());
++                    }
+                     Ok(Box::new(app))
+                 }),
+             )
+diff --git a/crates/ui-egui/src/agent_files.rs b/crates/ui-egui/src/agent_files.rs
+new file mode 100644
+index 0000000..609571f
+--- /dev/null
++++ b/crates/ui-egui/src/agent_files.rs
+@@ -0,0 +1,44 @@
++//! The agent file table: exports kept in memory for the in-page agent API.
++//!
++//! On the web every save and export becomes a browser download ([`crate::editing::download`]).
++//! A download is a one-way street — the page cannot read it back — so the same bytes are also
++//! stored here, where `window.pdfcraft` (the web app's agent API) lists and reads them:
++//! the last [`MAX_ENTRIES`] files, replaced by name, exactly as delivered to the browser.
++//!
++//! Desktop builds never download, so the table stays empty there.
++
++use std::sync::{Arc, Mutex};
++
++/// How many files the table keeps. Saves and exports both land here; the newest matter.
++pub const MAX_ENTRIES: usize = 32;
++
++type Table = Vec<(String, Arc<Vec<u8>>)>;
++
++static FILES: Mutex<Table> = Mutex::new(Vec::new());
++
++/// Remember `bytes` under `name`, replacing an earlier file of the same name.
++pub fn store(name: &str, bytes: &[u8]) {
++    let mut files = FILES.lock().unwrap_or_else(|e| e.into_inner());
++    files.retain(|(n, _)| n != name);
++    files.push((name.to_string(), Arc::new(bytes.to_vec())));
++    let excess = files.len().saturating_sub(MAX_ENTRIES);
++    files.drain(..excess);
++}
++
++/// The kept files: `(name, size)` oldest first.
++pub fn list() -> Vec<(String, usize)> {
++    FILES.lock().unwrap_or_else(|e| e.into_inner()).iter().map(|(n, b)| (n.clone(), b.len())).collect()
++}
++
++/// A file's bytes, if it is still kept.
++pub fn read(name: &str) -> Option<Arc<Vec<u8>>> {
++    FILES.lock().unwrap_or_else(|e| e.into_inner()).iter().find(|(n, _)| n == name).map(|(_, b)| b.clone())
++}
++
++/// Forget a file. Whether it existed.
++pub fn remove(name: &str) -> bool {
++    let mut files = FILES.lock().unwrap_or_else(|e| e.into_inner());
++    let before = files.len();
++    files.retain(|(n, _)| n != name);
++    files.len() != before
++}
+diff --git a/crates/ui-egui/src/editing.rs b/crates/ui-egui/src/editing.rs
+index f1b3166..8cb57c3 100644
+--- a/crates/ui-egui/src/editing.rs
++++ b/crates/ui-egui/src/editing.rs
+@@ -658,6 +658,8 @@ fn short_name(path: &str) -> String {
+ #[cfg(target_arch = "wasm32")]
+ pub(crate) fn download(name: &str, bytes: &[u8]) -> Result<(), String> {
+     use wasm_bindgen::JsCast;
++    // Also keep the bytes where the in-page agent API can read them back.
++    crate::agent_files::store(name, bytes);
+     let err = |e: wasm_bindgen::JsValue| format!("{e:?}");
+     let array = js_sys::Uint8Array::from(bytes);
+     let parts = js_sys::Array::of1(&array);
+diff --git a/crates/ui-egui/src/lib.rs b/crates/ui-egui/src/lib.rs
+index cef3d24..d5b8c3c 100644
+--- a/crates/ui-egui/src/lib.rs
++++ b/crates/ui-egui/src/lib.rs
+@@ -33,6 +33,7 @@ mod comment_props;
+ pub mod comments;
+ mod comments_panel;
+ mod compare_ui;
++pub mod agent_files;
+ pub mod control;
+ mod create_multiple_ui;
+ mod create_ui;
