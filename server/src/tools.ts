@@ -1,9 +1,12 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import crypto from "node:crypto";
 import type { TabRegistry } from "./registry.js";
 import type { Denylist } from "./denylist.js";
 
 const IMAGE_MAX_BYTES = 1_000_000; // PRD: cap previews at 1 MB
+const FILE_MAX_BYTES = 512 * 1024; // default cap for base64 file payloads
+const FILE_MAX_BYTES_HARD = 2 * 1024 * 1024; // never inline more than this
 
 function textResult(text: string) {
   return { content: [{ type: "text" as const, text }] };
@@ -140,6 +143,90 @@ export function buildServer(registry: TabRegistry, denylist: Denylist, log: (ev:
         return textResult(safeJson(result));
       } catch (e) {
         log("tool", { tool: "run_batch", n: commands.length, app: tab.app, tab: tab.sessionId, ok: false, ms: Date.now() - t0 });
+        return errResult(String((e as Error).message ?? e));
+      }
+    }
+  );
+
+  server.registerTool(
+    "list_files",
+    {
+      title: "List files in an app tab",
+      description: "List the app's in-browser file table (exports, imported media, saved projects) with paths, sizes and kinds. Use before get_file / send_file.",
+      inputSchema: { session: z.string().optional() },
+    },
+    async ({ session }) => {
+      const tab = registry.resolveTarget(session);
+      const result = await registry.call(tab.sessionId, "list_files", {});
+      log("tool", { tool: "list_files", app: tab.app, tab: tab.sessionId, ok: true });
+      return textResult(safeJson(result));
+    }
+  );
+
+  server.registerTool(
+    "get_file",
+    {
+      title: "Read a small file into the conversation",
+      description: "Return a file from the app's file table as base64 (with sha256). Small files only (captions, .srt, .json, settings); larger payloads should use send_file to a URL you control.",
+      inputSchema: {
+        path: z.string().describe("Path from list_files"),
+        max_bytes: z.number().int().positive().max(FILE_MAX_BYTES_HARD).optional().describe(`Inline up to this many bytes (default ${FILE_MAX_BYTES}, hard max ${FILE_MAX_BYTES_HARD})`),
+        session: z.string().optional(),
+      },
+    },
+    async ({ path, max_bytes, session }) => {
+      const cap = Math.min(max_bytes ?? FILE_MAX_BYTES, FILE_MAX_BYTES_HARD);
+      const tab = registry.resolveTarget(session);
+      const result = (await registry.call(tab.sessionId, "get_file", { path })) as
+        | { base64: string; kind?: string }
+        | { error: string };
+      const ok = !("error" in result);
+      log("tool", { tool: "get_file", path, app: tab.app, tab: tab.sessionId, ok });
+      if (!ok) return errResult(result.error);
+      const bytes = Math.floor((result.base64.length * 3) / 4);
+      if (bytes > cap) {
+        return errResult(`${path} is ${bytes} bytes (cap ${cap}). Use send_file to upload it to a URL you control instead of inlining it.`);
+      }
+      const buf = Buffer.from(result.base64, "base64");
+      const sha256 = crypto.createHash("sha256").update(buf).digest("hex").slice(0, 16);
+      return {
+        content: [
+          { type: "text" as const, text: `${path} — ${bytes} bytes, sha256:${sha256}` },
+          { type: "resource" as const, resource: { uri: `craft-file:///${tab.app}${path.startsWith("/") ? "" : "/"}${path}`, mimeType: result.kind || "application/octet-stream", blob: result.base64 } },
+        ],
+      };
+    }
+  );
+
+  server.registerTool(
+    "send_file",
+    {
+      title: "Upload a file from the app to a URL",
+      description: "Upload a file from the app's in-browser file table to a URL you supply (presigned PUT, upload endpoint, local receiver). Best for large media: bytes never enter the conversation. Blocked by the page's read-only mode.",
+      inputSchema: {
+        path: z.string().describe("Path from list_files"),
+        url: z.string().describe("http(s) URL to upload to"),
+        method: z.enum(["PUT", "POST"]).optional().describe("HTTP method (default PUT)"),
+        session: z.string().optional(),
+      },
+    },
+    async ({ path, url, method, session }) => {
+      let parsed: URL;
+      try { parsed = new URL(url); } catch { return errResult("url is not a valid absolute URL"); }
+      if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+        return errResult("only http(s) upload URLs are allowed");
+      }
+      const tab = registry.resolveTarget(session);
+      try {
+        const result = (await registry.call(tab.sessionId, "send_file", { path, url, method: method ?? "PUT" })) as
+          | { ok: boolean; status?: number; bytes?: number }
+          | { error: string };
+        const ok = !("error" in result) && result.ok !== false;
+        log("tool", { tool: "send_file", path, host: parsed.host, app: tab.app, tab: tab.sessionId, ok });
+        if (!ok) return errResult("error" in result ? result.error : "upload failed");
+        return textResult(`uploaded ${path} (${result.bytes ?? "?"} bytes) to ${parsed.host} — HTTP ${result.status ?? "?"}`);
+      } catch (e) {
+        log("tool", { tool: "send_file", path, host: parsed.host, app: tab.app, tab: tab.sessionId, ok: false });
         return errResult(String((e as Error).message ?? e));
       }
     }

@@ -60,7 +60,7 @@ try {
   ok("initialize ok", r.status === 200 && r.json?.result?.serverInfo?.name === "craft-relay", JSON.stringify(r.json).slice(0, 200));
   r = await mcp({ jsonrpc: "2.0", id: 3, method: "tools/list" });
   const tools = (r.json?.result?.tools ?? []).map((t) => t.name);
-  ok("six tools listed", tools.length === 6 && ["list_sessions", "list_commands", "run_command", "inspect", "get_image", "run_batch"].every((t) => tools.includes(t)), tools.join(","));
+  ok("nine tools listed", tools.length === 9 && ["list_sessions", "list_commands", "run_command", "inspect", "get_image", "run_batch", "list_files", "get_file", "send_file"].every((t) => tools.includes(t)), tools.join(","));
   r = await mcp({ jsonrpc: "2.0", id: 4, method: "tools/call", params: { name: "list_sessions", arguments: {} } });
   ok("list_sessions with no tabs gives guidance", r.json?.result?.content?.[0]?.text?.includes("No tabs connected"), r.text.slice(0, 120));
 
@@ -108,6 +108,21 @@ try {
   ws.send(JSON.stringify({ type: "response", id: requests[1].id, ok: true, result: { mime: "image/png", base64: "A".repeat(1_500_000) } }));
   r = await imgCall;
   ok("oversized image refused", r.json?.result?.isError === true && (r.json?.result?.content?.[0]?.text ?? "").includes("1 MB"), r.text.slice(0, 150));
+
+  // 7b. get_file cap + send_file validation
+  const smallCall = mcp({ jsonrpc: "2.0", id: 10, method: "tools/call", params: { name: "get_file", arguments: { path: "/captions.srt" } } });
+  await new Promise((res) => { const iv = setInterval(() => { if (requests.length >= 3) { clearInterval(iv); res(); } }, 20); setTimeout(res, 3000); });
+  ws.send(JSON.stringify({ type: "response", id: requests[2].id, ok: true, result: { base64: Buffer.from("1\n00:00:01,000 --> 00:00:02,000\nhello captions\n").toString("base64"), kind: "application/x-subrip" } }));
+  r = await smallCall;
+  const contents = r.json?.result?.content ?? [];
+  ok("get_file returns summary + resource blob", contents.length === 2 && contents[0]?.type === "text" && contents[1]?.type === "resource" && contents[1]?.resource?.blob, JSON.stringify(contents).slice(0, 150));
+  const bigCall = mcp({ jsonrpc: "2.0", id: 11, method: "tools/call", params: { name: "get_file", arguments: { path: "/big.wav" } } });
+  await new Promise((res) => { const iv = setInterval(() => { if (requests.length >= 4) { clearInterval(iv); res(); } }, 20); setTimeout(res, 3000); });
+  ws.send(JSON.stringify({ type: "response", id: requests[3].id, ok: true, result: { base64: "A".repeat(1_400_000) } }));
+  r = await bigCall;
+  ok("oversized get_file refused with send_file hint", r.json?.result?.isError === true && (r.json?.result?.content?.[0]?.text ?? "").includes("send_file"), r.text.slice(0, 150));
+  r = await mcp({ jsonrpc: "2.0", id: 12, method: "tools/call", params: { name: "send_file", arguments: { path: "/x", url: "ftp://evil" } } });
+  ok("send_file rejects non-http url", r.json?.result?.isError === true, r.text.slice(0, 100));
 
   // 8. timeout behavior
   const slowCall = mcp({ jsonrpc: "2.0", id: 9, method: "tools/call", params: { name: "run_command", arguments: { command: "develop.get", params: {} } } });

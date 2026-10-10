@@ -203,6 +203,15 @@
         if (hit) { pushLog({ t: Date.now(), tool: tool + ":" + cmds[i], err: "denylist" }); reply(m.id, false, 'command "' + cmds[i] + '" is on the denylist (' + hit + ") and was blocked in the page"); return; }
       }
     }
+    if (tool === "send_file" && state.readOnly) {
+      pushLog({ t: Date.now(), tool: "send_file:" + (args.path || ""), err: "read-only mode" });
+      reply(m.id, false, "read-only mode is on: file uploads are blocked");
+      return;
+    }
+    if ((tool === "list_files" || tool === "get_file" || tool === "send_file") && !adapter.listFiles) {
+      reply(m.id, false, "this app's adapter has no file API (filmcraft and effectcraft do)");
+      return;
+    }
 
     var done = function (result) {
       pushLog({ t: Date.now(), tool: tool + (args.command ? ":" + args.command : ""), ms: Math.round(performance.now() - t0) });
@@ -223,6 +232,15 @@
       else if (tool === "get_image") adapter.image(args.mode).then(function (img) {
         return downscaleImage(img.mime, img.base64, 0);
       }).then(done, fail);
+      else if (tool === "list_files") Promise.resolve(adapter.listFiles()).then(done, fail);
+      else if (tool === "get_file") Promise.resolve(adapter.file(args.path)).then(function (bytes) {
+        var kit = window.CraftRelayFileKit;
+        return { base64: kit.toBase64(bytes), kind: kit.mimeFor(args.path) };
+      }).then(done, fail);
+      else if (tool === "send_file") adapter.sendFile(args.path, args.url, args.method || "PUT").then(function (r) {
+        pushLog({ t: Date.now(), tool: "send_file:" + (args.path || ""), ms: Math.round(performance.now() - t0) });
+        reply(m.id, true, r);
+      }, fail);
       else reply(m.id, false, "unknown tool " + tool);
     } catch (e) { fail(e); }
   }

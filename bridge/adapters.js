@@ -6,8 +6,43 @@
   var adapters = {};
   window.CraftRelayAdapters = adapters;
 
-  /* Local copy of the relay denylist patterns: defense in depth — the page's
-   * read-only mode and the relay both re-check. */
+  /* File kit: bytes -> base64, mime sniffing by extension, and the shared
+   * upload path for send_file (browser -> caller-supplied URL). */
+  var MIME = {
+    srt: "application/x-subrip", vtt: "text/vtt", json: "application/json",
+    txt: "text/plain", csv: "text/csv", png: "image/png", jpg: "image/jpeg",
+    jpeg: "image/jpeg", svg: "image/svg+xml", webp: "image/webp",
+    wav: "audio/wav", mp3: "audio/mpeg", m4a: "audio/mp4", aac: "audio/aac",
+    ogg: "audio/ogg", flac: "audio/flac", mp4: "video/mp4", webm: "video/webm",
+    mov: "video/quicktime", fcproj: "application/json", ecproj: "application/json",
+    pdf: "application/pdf", zip: "application/zip"
+  };
+  function extOf(path) { var m = /\.([a-z0-9]+)$/i.exec(String(path || "")); return m ? m[1].toLowerCase() : ""; }
+  function toBase64(bytes) {
+    if (!bytes) throw new Error("no bytes returned");
+    if (typeof bytes === "string") bytes = new TextEncoder().encode(bytes);
+    var out = "", chunk = 0x8000;
+    for (var i = 0; i < bytes.length; i += chunk) {
+      out += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+    }
+    return btoa(out);
+  }
+  function uploadBytes(getBytes, path, url, method) {
+    return getBytes(path).then(function (bytes) {
+      if (typeof bytes === "string") bytes = new TextEncoder().encode(bytes);
+      return fetch(url, {
+        method: method || "PUT",
+        headers: { "Content-Type": MIME[extOf(path)] || "application/octet-stream" },
+        body: bytes
+      }).then(function (resp) {
+        if (!resp.ok) throw new Error("upload endpoint answered HTTP " + resp.status);
+        return { ok: true, status: resp.status, bytes: bytes.length };
+      });
+    });
+  }
+  window.CraftRelayFileKit = { toBase64: toBase64, mimeFor: function (p) { return MIME[extOf(p)] || "application/octet-stream"; } };
+  /* Denylist — local copy of the relay's patterns: defense in depth (the
+   * page's read-only mode and the relay both re-check). */
   var DENY = [
     "app.quit", "quit", "project.close", "document.close", "close.project",
     "library.delete", "delete.library", "photo.delete", "photos.delete",
@@ -114,6 +149,18 @@
       return call.then(normalizeImage, function (e) {
         throw new Error("image call failed: " + (e && (e.message || e)));
       });
+    },
+    listFiles: function () {
+      var nr = this.notReady(); if (nr) return Promise.reject(new Error(nr));
+      return window.effectcraft.files();
+    },
+    file: function (path) {
+      var nr = this.notReady(); if (nr) return Promise.reject(new Error(nr));
+      return window.effectcraft.readFile(path);
+    },
+    sendFile: function (path, url, method) {
+      var nr = this.notReady(); if (nr) return Promise.reject(new Error(nr));
+      return uploadBytes(function (p) { return window.effectcraft.readFile(p); }, path, url, method);
     }
   };
 
@@ -159,6 +206,18 @@
       return window.filmcraft.screenshot({}).then(normalizeImage, function (e) {
         throw new Error("screenshot failed: " + (e && (e.message || e)));
       });
+    },
+    listFiles: function () {
+      var nr = this.notReady(); if (nr) return Promise.reject(new Error(nr));
+      return window.filmcraft.files();
+    },
+    file: function (path) {
+      var nr = this.notReady(); if (nr) return Promise.reject(new Error(nr));
+      return window.filmcraft.readFile(path);
+    },
+    sendFile: function (path, url, method) {
+      var nr = this.notReady(); if (nr) return Promise.reject(new Error(nr));
+      return uploadBytes(function (p) { return window.filmcraft.readFile(p); }, path, url, method);
     }
   };
 
