@@ -366,9 +366,9 @@
       });
     },
     runCommand: function (command, params) {
-      // Registry commands run as the menu would (no params); the ui.* control
-      // methods take a params object (ui.click {id} / {x,y}, ui.set {key,value}…).
-      if (/^ui\./.test(command)) return window.pdfcraft.request(command, params || {});
+      // Registry commands run as the menu would (no params); the control-channel
+      // methods (ui.* and form.*) take a params object.
+      if (/^(ui|form)\./.test(command)) return window.pdfcraft.request(command, params || {});
       return window.pdfcraft.execute(command);
     },
     inspect: function () { return window.pdfcraft.state(); },
