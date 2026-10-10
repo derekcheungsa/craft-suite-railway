@@ -14,6 +14,8 @@ ARG EFFECTCRAFT_VERSION=0.6.0
 # Optional: serve a custom FilmCraft web build instead of the upstream release
 # (e.g. a build from main that ships the window.filmcraft agent API).
 ARG FILMCRAFT_URL=""
+# Optional: custom PhotoCraft web build (the fork that installs window.photocraft).
+ARG PHOTOCRAFT_URL=""
 
 RUN apk add --no-cache curl unzip gzip
 WORKDIR /site
@@ -29,7 +31,7 @@ RUN set -eux; \
       mv "/tmp/app/${repo}-web-${ver}" "/site/${repo}"; \
       rm -rf /tmp/app /tmp/app.zip; \
     }; \
-    fetch photocraft  "${PHOTOCRAFT_VERSION}"; \
+    fetch photocraft  "${PHOTOCRAFT_VERSION}" "${PHOTOCRAFT_URL}"; \
     fetch lightcraft  "${LIGHTCRAFT_VERSION}"; \
     fetch pdfcraft    "${PDFCRAFT_VERSION}"; \
     fetch vectorcraft "${VECTORCRAFT_VERSION}"; \

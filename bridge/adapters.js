@@ -221,5 +221,34 @@
     }
   };
 
+  /* ---------------- PhotoCraft ----------------
+   * In-page API (our fork of main, via PHOTOCRAFT_URL; stock v0.5.0 has no
+   * in-page API — detect() simply never fires there): window.photocraft with
+   * the desktop control methods as promises. Requests drain on the UI frame
+   * loop like FilmCraft's. */
+  adapters.photocraft = {
+    app: "photocraft",
+    versions: ["0.5"],
+    detect: function () { return typeof window.photocraft === "object" && typeof window.photocraft.execute === "function"; },
+    readOnlyCommands: [],
+    listCommands: function (filter) {
+      return window.photocraft.commands().then(function (cmds) {
+        var f = (filter || "").toLowerCase();
+        if (!f) return cmds;
+        return cmds instanceof Array
+          ? cmds.filter(function (c) { return JSON.stringify(c).toLowerCase().indexOf(f) !== -1; })
+          : { note: "catalog not an array; raw follows", raw: cmds, filter: filter };
+      });
+    },
+    runCommand: function (command, params) { return window.photocraft.execute(command, params || {}); },
+    inspect: function () { return window.photocraft.inspect(); },
+    image: function () {
+      // {focus:false}: no window to raise in a browser tab.
+      return window.photocraft.screenshot({ focus: false }).then(normalizeImage, function (e) {
+        throw new Error("screenshot failed: " + (e && (e.message || e)));
+      });
+    }
+  };
+
   window.CraftRelayDenied = denied;
 })();
