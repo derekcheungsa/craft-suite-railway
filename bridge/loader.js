@@ -214,7 +214,7 @@
       return;
     }
     if ((tool === "list_files" || tool === "get_file" || tool === "send_file") && !adapter.listFiles) {
-      reply(m.id, false, "this app's adapter has no file API (filmcraft and effectcraft do)");
+      reply(m.id, false, "this app's adapter has no file API (filmcraft, effectcraft and photocraft do)");
       return;
     }
     if (tool === "put_file" && !adapter.importFile) {

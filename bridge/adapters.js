@@ -29,6 +29,7 @@
   }
   function uploadBytes(getBytes, path, url, method) {
     return getBytes(path).then(function (bytes) {
+      if (bytes instanceof Error) throw bytes;
       if (typeof bytes === "string") bytes = new TextEncoder().encode(bytes);
       return fetch(url, {
         method: method || "PUT",
@@ -268,15 +269,29 @@
     runCommand: function (command, params) { return window.photocraft.execute(command, params || {}); },
     inspect: function () { return window.photocraft.inspect(); },
     image: function () {
-      // {focus:false}: no window to raise in a browser tab. eframe's web runner
-      // does not complete ViewportCommand::Screenshot, so the promise would
-      // hang until the relay timeout — race it into a clear error instead.
-      return Promise.race([
-        window.photocraft.screenshot({ focus: false }).then(normalizeImage),
-        new Promise(function (res, rej) { setTimeout(function () { rej(new Error("PhotoCraft's web build cannot capture screenshots yet (eframe web limitation); use inspect")); }, 12000); }),
-      ]).catch(function (e) {
-        throw new Error((e && e.message) ? e.message : "screenshot failed");
+      // The engine renders the composite itself (document.render): full
+      // flatten via the export pipeline, no screen/GPU capture, works in
+      // background tabs. Auto-shrinks under 1MB engine-side; the bridge
+      // downscaler is a second guard.
+      return window.photocraft.request("document.render", { format: "jpg", maxSize: 1280 }).then(function (r) {
+        if (!r || !r.data) throw new Error("document.render returned no data");
+        return { mime: r.format === "png" ? "image/png" : "image/jpeg", base64: r.data };
+      }).then(normalizeImage, function (e) {
+        throw new Error((e && e.message) ? e.message : "document.render failed");
       });
+    },
+    listFiles: function () {
+      return window.photocraft.files();
+    },
+    file: function (path) {
+      return window.photocraft.readFile(path).then(function (bytes) {
+        if (bytes && bytes instanceof Error) throw bytes;
+        if (!bytes) throw new Error(path + ": not found");
+        return bytes;
+      });
+    },
+    sendFile: function (path, url, method) {
+      return uploadBytes(function (p) { return window.photocraft.readFile(p); }, path, url, method);
     },
     importFile: function (args) {
       // fork v2: window.photocraft.importBytes(name, Uint8Array) delivers the
