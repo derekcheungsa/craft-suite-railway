@@ -55,7 +55,9 @@ const denylist = new Denylist(DENYLIST_EXTRA);
 
 // ---------- HTTP app ----------
 const app = express();
-app.use(express.json({ limit: "2mb" }));
+// put_file carries base64 payloads (capped at PUT_FILE_MAX in tools); 12 MB
+// leaves headroom over the tool's own limit.
+app.use(express.json({ limit: "12mb" }));
 
 app.get("/healthz", (_req, res) => {
   res.type("text/plain").send("ok");

@@ -208,8 +208,17 @@
       reply(m.id, false, "read-only mode is on: file uploads are blocked");
       return;
     }
+    if (tool === "put_file" && state.readOnly) {
+      pushLog({ t: Date.now(), tool: "put_file:" + (args.name || ""), err: "read-only mode" });
+      reply(m.id, false, "read-only mode is on: imports are blocked");
+      return;
+    }
     if ((tool === "list_files" || tool === "get_file" || tool === "send_file") && !adapter.listFiles) {
       reply(m.id, false, "this app's adapter has no file API (filmcraft and effectcraft do)");
+      return;
+    }
+    if (tool === "put_file" && !adapter.importFile) {
+      reply(m.id, false, "this app's adapter cannot import files (filmcraft, effectcraft and photocraft can)");
       return;
     }
 
@@ -241,6 +250,7 @@
         pushLog({ t: Date.now(), tool: "send_file:" + (args.path || ""), ms: Math.round(performance.now() - t0) });
         reply(m.id, true, r);
       }, fail);
+      else if (tool === "put_file") adapter.importFile(args).then(done, fail);
       else reply(m.id, false, "unknown tool " + tool);
     } catch (e) { fail(e); }
   }

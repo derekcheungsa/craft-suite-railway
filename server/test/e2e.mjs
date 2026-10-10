@@ -60,7 +60,7 @@ try {
   ok("initialize ok", r.status === 200 && r.json?.result?.serverInfo?.name === "craft-relay", JSON.stringify(r.json).slice(0, 200));
   r = await mcp({ jsonrpc: "2.0", id: 3, method: "tools/list" });
   const tools = (r.json?.result?.tools ?? []).map((t) => t.name);
-  ok("nine tools listed", tools.length === 9 && ["list_sessions", "list_commands", "run_command", "inspect", "get_image", "run_batch", "list_files", "get_file", "send_file"].every((t) => tools.includes(t)), tools.join(","));
+  ok("ten tools listed", tools.length === 10 && ["list_sessions", "list_commands", "run_command", "inspect", "get_image", "run_batch", "list_files", "get_file", "send_file", "put_file"].every((t) => tools.includes(t)), tools.join(","));
   r = await mcp({ jsonrpc: "2.0", id: 4, method: "tools/call", params: { name: "list_sessions", arguments: {} } });
   ok("list_sessions with no tabs gives guidance", r.json?.result?.content?.[0]?.text?.includes("No tabs connected"), r.text.slice(0, 120));
 
@@ -123,6 +123,22 @@ try {
   ok("oversized get_file refused with send_file hint", r.json?.result?.isError === true && (r.json?.result?.content?.[0]?.text ?? "").includes("send_file"), r.text.slice(0, 150));
   r = await mcp({ jsonrpc: "2.0", id: 12, method: "tools/call", params: { name: "send_file", arguments: { path: "/x", url: "ftp://evil" } } });
   ok("send_file rejects non-http url", r.json?.result?.isError === true, r.text.slice(0, 100));
+
+  // 9. put_file validation + happy path
+  r = await mcp({ jsonrpc: "2.0", id: 13, method: "tools/call", params: { name: "put_file", arguments: { name: "a.png" } } });
+  ok("put_file requires base64 or url", r.json?.result?.isError === true && (r.json?.result?.content?.[0]?.text ?? "").includes("base64 or url"), r.text.slice(0, 100));
+  r = await mcp({ jsonrpc: "2.0", id: 14, method: "tools/call", params: { name: "put_file", arguments: { base64: "AAA", url: "https://x/y.png" } } });
+  ok("put_file rejects base64+url", r.json?.result?.isError === true, r.text.slice(0, 100));
+  r = await mcp({ jsonrpc: "2.0", id: 15, method: "tools/call", params: { name: "put_file", arguments: { base64: "AAA" } } });
+  ok("put_file requires name with base64", r.json?.result?.isError === true, r.text.slice(0, 100));
+  r = await mcp({ jsonrpc: "2.0", id: 16, method: "tools/call", params: { name: "put_file", arguments: { url: "ftp://evil/a.png" } } });
+  ok("put_file rejects non-http url", r.json?.result?.isError === true, r.text.slice(0, 100));
+  const putCall = mcp({ jsonrpc: "2.0", id: 17, method: "tools/call", params: { name: "put_file", arguments: { name: "gen.png", base64: Buffer.from("fakepng").toString("base64") } } });
+  await new Promise((res) => { const iv = setInterval(() => { if (requests.length >= 5) { clearInterval(iv); res(); } }, 20); setTimeout(res, 3000); });
+  ok("put_file reaches the tab", requests.length >= 5 && requests[4].tool === "put_file" && requests[4].args.name === "gen.png", JSON.stringify(requests[4] || {}));
+  ws.send(JSON.stringify({ type: "response", id: requests[4].id, ok: true, result: { ok: true, items: [{ path: "/gen.png" }] } }));
+  r = await putCall;
+  ok("put_file returns import result", (r.json?.result?.content?.[0]?.text ?? "").includes("gen.png"), r.text.slice(0, 150));
 
   // 8. timeout behavior
   const slowCall = mcp({ jsonrpc: "2.0", id: 9, method: "tools/call", params: { name: "run_command", arguments: { command: "develop.get", params: {} } } });

@@ -7,6 +7,7 @@ import type { Denylist } from "./denylist.js";
 const IMAGE_MAX_BYTES = 1_000_000; // PRD: cap previews at 1 MB
 const FILE_MAX_BYTES = 512 * 1024; // default cap for base64 file payloads
 const FILE_MAX_BYTES_HARD = 2 * 1024 * 1024; // never inline more than this
+const PUT_FILE_MAX_B64 = 8 * 1024 * 1024; // max encoded size for put_file imports
 
 function textResult(text: string) {
   return { content: [{ type: "text" as const, text }] };
@@ -227,6 +228,46 @@ export function buildServer(registry: TabRegistry, denylist: Denylist, log: (ev:
         return textResult(`uploaded ${path} (${result.bytes ?? "?"} bytes) to ${parsed.host} — HTTP ${result.status ?? "?"}`);
       } catch (e) {
         log("tool", { tool: "send_file", path, host: parsed.host, app: tab.app, tab: tab.sessionId, ok: false });
+        return errResult(String((e as Error).message ?? e));
+      }
+    }
+  );
+
+  server.registerTool(
+    "put_file",
+    {
+      title: "Import a file into an app",
+      description: "Put a file into the app tab: from base64 (name required) or from a URL the page fetches (no size limit through the conversation). Imports as a dropped file — PhotoCraft opens it as a document, FilmCraft/EffectCraft add it to the file table. Blocked by the page's read-only mode.",
+      inputSchema: {
+        name: z.string().optional().describe("File name (required with base64; derived from the URL otherwise)"),
+        base64: z.string().optional().describe("File contents, base64 (max ~6 MB decoded)"),
+        url: z.string().optional().describe("http(s) URL the page fetches directly"),
+        session: z.string().optional(),
+      },
+    },
+    async ({ name, base64, url, session }) => {
+      if (!base64 && !url) return errResult("provide either base64 or url");
+      if (base64 && url) return errResult("provide base64 or url, not both");
+      if (base64 && !name) return errResult("name is required when importing from base64");
+      if (base64 && base64.length > PUT_FILE_MAX_B64) {
+        return errResult(`base64 payload is ${base64.length} chars (cap ${PUT_FILE_MAX_B64}); host the file and pass its url instead`);
+      }
+      if (url) {
+        let parsed: URL;
+        try { parsed = new URL(url); } catch { return errResult("url is not a valid absolute URL"); }
+        if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return errResult("only http(s) urls are allowed");
+      }
+      const tab = registry.resolveTarget(session);
+      try {
+        const result = (await registry.call(tab.sessionId, "put_file", {
+          name: name ?? null, base64: base64 ?? null, url: url ?? null,
+        })) as { error?: string } & Record<string, unknown>;
+        const ok = !result.error;
+        log("tool", { tool: "put_file", name: name ?? url ?? "", app: tab.app, tab: tab.sessionId, ok });
+        if (!ok) return errResult(String(result.error));
+        return textResult(safeJson(result));
+      } catch (e) {
+        log("tool", { tool: "put_file", app: tab.app, tab: tab.sessionId, ok: false });
         return errResult(String((e as Error).message ?? e));
       }
     }

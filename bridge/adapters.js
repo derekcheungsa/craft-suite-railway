@@ -40,7 +40,15 @@
       });
     });
   }
-  window.CraftRelayFileKit = { toBase64: toBase64, mimeFor: function (p) { return MIME[extOf(p)] || "application/octet-stream"; } };
+  function fromBase64(b64) {
+    var bin = atob(b64), u8 = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+    return u8;
+  }
+  function toFile(name, b64) {
+    return new File([fromBase64(b64)], name);
+  }
+  window.CraftRelayFileKit = { toBase64: toBase64, fromBase64: fromBase64, mimeFor: function (p) { return MIME[extOf(p)] || "application/octet-stream"; }, toFile: toFile };
   /* Denylist — local copy of the relay's patterns: defense in depth (the
    * page's read-only mode and the relay both re-check). */
   var DENY = [
@@ -161,6 +169,12 @@
     sendFile: function (path, url, method) {
       var nr = this.notReady(); if (nr) return Promise.reject(new Error(nr));
       return uploadBytes(function (p) { return window.effectcraft.readFile(p); }, path, url, method);
+    },
+    importFile: function (args) {
+      // window.effectcraft.addFile accepts a URL string or a File (verified).
+      var nr = this.notReady(); if (nr) return Promise.reject(new Error(nr));
+      if (args.url) return window.effectcraft.addFile(args.url, args.name || undefined);
+      return window.effectcraft.addFile(window.CraftRelayFileKit.toFile(args.name, args.base64));
     }
   };
 
@@ -218,6 +232,17 @@
     sendFile: function (path, url, method) {
       var nr = this.notReady(); if (nr) return Promise.reject(new Error(nr));
       return uploadBytes(function (p) { return window.filmcraft.readFile(p); }, path, url, method);
+    },
+    importFile: function (args) {
+      // args: {name, base64, url}
+      var nr = this.notReady(); if (nr) return Promise.reject(new Error(nr));
+      var kit = window.CraftRelayFileKit;
+      if (args.url) {
+        return window.filmcraft.importUrl(args.url, args.name || undefined);
+      }
+      var file = kit.toFile(args.name, args.base64);
+      if (/\.fcproj$/i.test(args.name)) return window.filmcraft.openProject(file);
+      return window.filmcraft.importFiles([file]);
     }
   };
 
@@ -252,6 +277,17 @@
       ]).catch(function (e) {
         throw new Error((e && e.message) ? e.message : "screenshot failed");
       });
+    },
+    importFile: function (args) {
+      // fork v2: window.photocraft.importBytes(name, Uint8Array) delivers the
+      // file through the same inbox as a drag-and-drop (opens as a document).
+      if (typeof window.photocraft.importBytes !== "function") {
+        return Promise.reject(new Error("this PhotoCraft build predates importBytes — redeploy the suite (PHOTOCRAFT_URL must point at the main2 build)"));
+      }
+      if (args.url) {
+        return Promise.reject(new Error("PhotoCraft import from URL is not supported; pass base64"));
+      }
+      return window.photocraft.importBytes(args.name, window.CraftRelayFileKit.fromBase64(args.base64));
     }
   };
 
