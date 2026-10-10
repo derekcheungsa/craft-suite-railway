@@ -44,7 +44,9 @@ RUN set -eux; \
 
 # Craft Relay bridge: static script served same-origin. Inject the script
 # tags BEFORE precompressing, so index.html.gz matches the on-disk file.
-ARG RELAY_URL=""
+# RELAY_URL may be absolute (https://relay.example) or relative ("/relay"),
+# which resolves against the page origin through nginx's /relay/ proxy.
+ARG RELAY_URL="/relay"
 COPY bridge/ /site/bridge/
 RUN printf 'window.CRAFT_RELAY = { url: "%s" };\n' "$RELAY_URL" > /site/bridge/config.js && \
     for f in /site/*/index.html; do \
@@ -60,7 +62,11 @@ RUN find /site -type f \( -name '*.wasm' -o -name '*.js' -o -name '*.html' \) \
 # ---- Stage 2: nginx serving the six apps + portal ----
 FROM nginx:1.27-alpine
 
+# Port nginx listens on, and the internal address of craft-relay that the
+# same-origin /relay/ proxy forwards to (Railway private networking).
 ENV PORT=8080
+ARG RELAY_UPSTREAM="http://craft-relay.railway.internal:8091"
+ENV RELAY_UPSTREAM=${RELAY_UPSTREAM}
 
 COPY nginx/templates/default.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=fetch /site /usr/share/nginx/html

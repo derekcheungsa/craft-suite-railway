@@ -114,6 +114,9 @@
     setStatus("connecting");
     var ws;
     try {
+      // A relative RELAY_URL ("/relay") is same-origin: nginx proxies /relay/
+      // to craft-relay, so deployments work without knowing its public domain.
+      if (/^\/[^/]/.test(url)) url = location.origin + url;
       var wsUrl = url.replace(/^http(s?):\/\//, "ws$1://").replace(/\/+$/, "") + "/bridge?token=" + encodeURIComponent(token);
       dbg("opening websocket:", wsUrl.replace(/token=[^&]*/, "token=***"));
       ws = new WebSocket(wsUrl);
@@ -340,7 +343,7 @@
     var setNoteOrig = setNote;
     setNote = function (t) { noteEl.textContent = t || ""; noteEl.style.display = t ? "block" : "none"; };
 
-    urlInput = el("input", { type: "text", value: saved.url || "", placeholder: "https://your-relay.up.railway.app", spellcheck: "false" });
+    urlInput = el("input", { type: "text", value: saved.url || "", placeholder: "/relay (same-origin default) or https://relay.example", spellcheck: "false" });
     tokenInput = el("input", { type: "password", value: saved.token || "", placeholder: "bridge token", spellcheck: "false" });
     roInput = el("input", { type: "checkbox", onchange: function () { state.readOnly = roInput.checked; } });
 
