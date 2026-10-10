@@ -65,7 +65,7 @@
   function downscaleImage(mime, base64, attempt) {
     var dataUrl = "data:" + (mime || "image/png") + ";base64," + base64;
     var maxBytes = 950 * 1024;
-    if (Math.floor(base64.length * 3 / 4) <= maxBytes && attempt > 0) {
+    if (Math.floor(base64.length * 3 / 4) <= maxBytes) {
       return Promise.resolve({ mime: mime || "image/png", base64: base64 });
     }
     var cfg = [
