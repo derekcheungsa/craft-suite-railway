@@ -7,7 +7,7 @@ FROM alpine:3.20 AS fetch
 
 ARG PHOTOCRAFT_VERSION=0.5.0-main4
 ARG LIGHTCRAFT_VERSION=0.4.0
-ARG PDFCRAFT_VERSION=0.5.0-main
+ARG PDFCRAFT_VERSION=0.5.0-main2
 ARG VECTORCRAFT_VERSION=0.7.0
 ARG FILMCRAFT_VERSION=0.4.0-main
 ARG EFFECTCRAFT_VERSION=0.6.0
@@ -17,7 +17,7 @@ ARG EFFECTCRAFT_VERSION=0.6.0
 # suffix and a commit-tagged asset.
 ARG FILMCRAFT_URL="https://github.com/derekcheungsa/craft-suite-railway/releases/download/filmcraft-web-0.4.0-main-7b6c134/filmcraft-web-0.4.0-main.zip"
 ARG PHOTOCRAFT_URL="https://github.com/derekcheungsa/craft-suite-railway/releases/download/photocraft-web-0.5.0-main4-0c72d95/photocraft-web-0.5.0-main4.zip"
-ARG PDFCRAFT_URL="https://github.com/derekcheungsa/craft-suite-railway/releases/download/pdfcraft-web-0.5.0-main-87b66ec/pdfcraft-web-0.5.0-main.zip"
+ARG PDFCRAFT_URL="https://github.com/derekcheungsa/craft-suite-railway/releases/download/pdfcraft-web-0.5.0-main2-23f0675/pdfcraft-web-0.5.0-main2.zip"
 
 RUN apk add --no-cache curl unzip gzip
 WORKDIR /site

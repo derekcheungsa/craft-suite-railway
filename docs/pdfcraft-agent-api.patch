@@ -1,3 +1,16 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 3523ac1..c06829d 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -3946,6 +3946,8 @@ dependencies = [
+  "egui",
+  "js-sys",
+  "pdfcraft-ui-egui",
++ "serde_json",
++ "wasm-bindgen",
+  "wasm-bindgen-futures",
+  "web-sys",
+ ]
 diff --git a/apps/pdfcraft-web/Cargo.toml b/apps/pdfcraft-web/Cargo.toml
 index a8d472d..1b1e957 100644
 --- a/apps/pdfcraft-web/Cargo.toml
@@ -14,7 +27,7 @@ index a8d472d..1b1e957 100644
  js-sys = "0.3"
 diff --git a/apps/pdfcraft-web/src/api.rs b/apps/pdfcraft-web/src/api.rs
 new file mode 100644
-index 0000000..0b31d7a
+index 0000000..f9ef5cf
 --- /dev/null
 +++ b/apps/pdfcraft-web/src/api.rs
 @@ -0,0 +1,297 @@
@@ -306,7 +319,7 @@ index 0000000..0b31d7a
 +                "app": "pdfcraft",
 +                "version": env!("CARGO_PKG_VERSION"),
 +                "api": "ui-control",
-+                "methods": ["ui.state", "ui.inspect", "ui.click", "ui.move", "ui.drag", "ui.type", "ui.key", "ui.command", "ui.commands", "ui.set", "ui.screenshot"],
++                "methods": ["ui.state", "ui.inspect", "ui.click", "ui.move", "ui.drag", "ui.type", "ui.key", "ui.command", "ui.commands", "ui.set", "ui.screenshot", "form.fields", "form.set", "form.set_many", "form.reset", "form.import"],
 +            }))
 +        })
 +        .into_js_value(),
@@ -391,6 +404,166 @@ index 0000000..609571f
 +    files.retain(|(n, _)| n != name);
 +    files.len() != before
 +}
+diff --git a/crates/ui-egui/src/control.rs b/crates/ui-egui/src/control.rs
+index 4e80e52..ab8b22c 100644
+--- a/crates/ui-egui/src/control.rs
++++ b/crates/ui-egui/src/control.rs
+@@ -175,6 +175,16 @@ pub(crate) trait Host {
+     fn commands(&self) -> Value;
+     fn set(&mut self, key: &str, value: &str) -> Reply;
+     fn open(&mut self, path: &str) -> Reply;
++    /// The interactive fields of the active document (`form.fields`).
++    fn forms(&self) -> Value;
++    /// Fill one field (`form.set`): a JSON value mapped by the field's kind.
++    fn form_set(&mut self, name: &str, value: &Value) -> Reply;
++    /// Fill several fields (`form.set_many`): `{name: value, …}`.
++    fn form_set_many(&mut self, values: &Value) -> Reply;
++    /// Clear fields to their defaults (`form.reset`): all, or the named ones.
++    fn form_reset(&mut self, names: Option<Vec<String>>) -> Reply;
++    /// Import XFDF/FDF/XML/CSV form and comment data (`form.import`).
++    fn form_import(&mut self, name: &str, bytes: Vec<u8>) -> Reply;
+ }
+ 
+ impl Control {
+@@ -311,8 +321,31 @@ impl Control {
+                 ctx.request_repaint();
+                 Ok(Handled::Screenshot(region))
+             }
++            "form.fields" => Ok(Handled::Now(Ok(host.forms()))),
++            "form.set" => Ok(Handled::Now(host.form_set(str_param("name")?, p.get("value").unwrap_or(&Value::Null)))),
++            "form.set_many" => {
++                let values = p.get("values").ok_or("form.set_many: missing parameter values ({{field name: value}})")?;
++                Ok(Handled::Now(host.form_set_many(values)))
++            }
++            "form.reset" => {
++                let names = match p.get("names") {
++                    None | Some(Value::Null) => None,
++                    Some(Value::Array(a)) => Some(a.iter().filter_map(Value::as_str).map(str::to_string).collect()),
++                    Some(_) => return Err("form.reset: names must be an array of field names, or absent for all".into()),
++                };
++                Ok(Handled::Now(host.form_reset(names)))
++            }
++            "form.import" => {
++                let name = str_param("name")?;
++                let b64 = str_param("base64")?;
++                use base64::Engine as _;
++                let bytes = base64::engine::general_purpose::STANDARD
++                    .decode(b64)
++                    .map_err(|e| format!("form.import: bad base64: {e}"))?;
++                Ok(Handled::Now(host.form_import(&name, bytes)))
++            }
+             other => Err(format!(
+-                "unknown method {other:?} (ui.state, ui.inspect, ui.click, ui.move, ui.drag, ui.type, ui.key, ui.command, ui.commands, ui.set, ui.open, ui.screenshot)"
++                "unknown method {other:?} (ui.state, ui.inspect, ui.click, ui.move, ui.drag, ui.type, ui.key, ui.command, ui.commands, ui.set, ui.open, ui.screenshot, form.fields, form.set, form.set_many, form.reset, form.import)"
+             )),
+         })();
+         r.unwrap_or_else(|e| Handled::Now(Err(e)))
+@@ -638,6 +671,105 @@ impl Host for crate::PdfCraftApp {
+     fn open(&mut self, _path: &str) -> Reply {
+         Err("ui.open needs a file system; on the web, drop the file on the page".into())
+     }
++
++    fn forms(&self) -> Value {
++        let Some((_, id)) = self.active_ids() else { return json!({ "fields": [], "note": "no open document" }); };
++        let Some(doc) = self.session.get(id) else { return json!({ "fields": [], "note": "no open document" }); };
++        let fields: Vec<Value> = doc
++            .form
++            .iter()
++            .map(|f| {
++                json!({
++                    "name": f.name,
++                    "kind": format!("{:?}", f.kind),
++                    "value": f.value,
++                    "default": f.default,
++                    "options": f.options.iter().map(|(export, display)| json!({ "export": export, "display": display })).collect::<Vec<_>>(),
++                    "tooltip": f.tooltip,
++                })
++            })
++            .collect();
++        json!({ "fields": fields })
++    }
++
++    fn form_set(&mut self, name: &str, value: &Value) -> Reply {
++        let kind = self.active_field_kind(name);
++        let v = agent_field_value(kind, value)?;
++        if self.apply_edit(pdfcraft_engine::Edit::SetFieldValue { name: name.to_string(), value: v }) {
++            Ok(json!({ "set": name }))
++        } else {
++            Err(format!("could not set {name:?} (no such field, a read-only document, or the value was refused — see form.fields for the field's kind)"))
++        }
++    }
++
++    fn form_set_many(&mut self, values: &Value) -> Reply {
++        let Some(map) = values.as_object() else {
++            return Err("form.set_many: values must be an object {{field name: value, …}}".into());
++        };
++        let mut set: Vec<&str> = Vec::new();
++        let mut failed: Vec<&str> = Vec::new();
++        for (name, v) in map {
++            let kind = self.active_field_kind(name);
++            let value = match agent_field_value(kind, v) {
++                Ok(v) => v,
++                Err(e) => return Err(format!("form.set_many: {name}: {e}")),
++            };
++            if self.apply_edit(pdfcraft_engine::Edit::SetFieldValue { name: name.clone(), value }) {
++                set.push(name);
++            } else {
++                failed.push(name);
++            }
++        }
++        if failed.is_empty() {
++            Ok(json!({ "set": set }))
++        } else {
++            Err(format!("set {:?}; could not set {:?}", set, failed))
++        }
++    }
++
++    fn form_reset(&mut self, names: Option<Vec<String>>) -> Reply {
++        if self.apply_edit(pdfcraft_engine::Edit::ResetForm { names }) {
++            Ok(json!({ "reset": true }))
++        } else {
++            Err("could not reset the form (a read-only document, or no form)".into())
++        }
++    }
++
++    fn form_import(&mut self, name: &str, bytes: Vec<u8>) -> Reply {
++        let n = bytes.len();
++        if self.apply_edit(pdfcraft_engine::Edit::ImportData { name: name.to_string(), bytes: Arc::new(bytes) }) {
++            Ok(json!({ "imported": name, "bytes": n }))
++        } else {
++            Err(format!("could not import {name} (XFDF/FDF/XML/CSV/text into the active document; check the format)"))
++        }
++    }
++}
++
++/// A field's kind in the active document, for mapping JSON values (`None`: unknown field).
++impl crate::PdfCraftApp {
++    fn active_field_kind(&self, name: &str) -> Option<pdfcraft_engine::FormFieldKind> {
++        let (_, id) = self.active_ids()?;
++        let doc = self.session.get(id)?;
++        doc.form.iter().find(|f| f.name == name).map(|f| f.kind)
++    }
++}
++
++/// Map a JSON value to a [`FieldValue`] by the field's kind:
++/// strings fill text (a radio's on-state for radio groups), bools tick check boxes,
++/// arrays pick choices, numbers become text, `null` clears a radio group.
++fn agent_field_value(kind: Option<pdfcraft_engine::FormFieldKind>, v: &Value) -> Result<pdfcraft_engine::FieldValue, String> {
++    use pdfcraft_engine::FieldValue;
++    match v {
++        Value::String(s) => match kind {
++            Some(pdfcraft_engine::FormFieldKind::Radio) => Ok(FieldValue::Radio(Some(s.clone()))),
++            _ => Ok(FieldValue::Text(s.clone())),
++        },
++        Value::Bool(b) => Ok(FieldValue::Check(*b)),
++        Value::Number(n) => Ok(FieldValue::Text(n.to_string())),
++        Value::Null => Ok(FieldValue::Radio(None)),
++        Value::Array(a) => Ok(FieldValue::Choice(a.iter().filter_map(Value::as_str).map(str::to_string).collect())),
++        _ => Err("value must be a string, number, bool, array of strings, or null".into()),
++    }
+ }
+ 
+ // ---- transport (native only) -----------------------------------------------------------------
 diff --git a/crates/ui-egui/src/editing.rs b/crates/ui-egui/src/editing.rs
 index f1b3166..8cb57c3 100644
 --- a/crates/ui-egui/src/editing.rs

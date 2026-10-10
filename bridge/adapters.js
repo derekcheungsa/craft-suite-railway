@@ -333,15 +333,36 @@
     app: "pdfcraft",
     versions: ["0.5"],
     detect: function () { return typeof window.pdfcraft === "object" && typeof window.pdfcraft.request === "function"; },
-    readOnlyCommands: ["ui.state", "ui.commands", "ui.inspect", "ui.screenshot"],
+    readOnlyCommands: ["ui.state", "ui.commands", "ui.inspect", "ui.screenshot", "form.fields"],
+    // The control-channel methods every build answers (0.5.0-main2+ adds form.*).
+    // Listed with list_commands so the interaction model is discoverable in-band.
+    agentMethods: [
+      { command: "form.fields", params: {}, doc: "Interactive fields of the active document: name, kind (Text/CheckBox/Radio/Combo/List/Signature), value, default, options, tooltip" },
+      { command: "form.set", params: { name: "full_name", value: "Ada Lovelace" }, doc: "Fill one field. Value by kind: string -> text (a radio's on-state for radios), true/false -> check box, array -> choices, number -> text, null -> clear a radio group" },
+      { command: "form.set_many", params: { values: { full_name: "Ada Lovelace", date_signed: "2026-10-10" } }, doc: "Fill several fields in one call: {field name: value, ...}" },
+      { command: "form.reset", params: {}, doc: "Clear fields back to their defaults — all of them, or {names: [\"full_name\"]}" },
+      { command: "form.import", params: { name: "data.xfdf", base64: "..." }, doc: "Import XFDF/FDF/XML/CSV form + comment data into the ACTIVE document (undoable). form.fields lists the field names an XFDF needs" },
+      { command: "ui.state", params: {}, doc: "App state: documents, active page, zoom, panels, dialog, notice, pages_on_screen (rects for aiming ui.click/ui.drag)" },
+      { command: "ui.inspect", params: { query: "Save" }, doc: "Widget tree (AccessKit): buttons, fields, text boxes with id, label, value, rect; query/role/limit filters. This is how to find what to click" },
+      { command: "ui.click", params: { label: "Save" }, doc: "Click a widget by AccessKit id or label, or a point {x, y} in window points (see ui.state pages_on_screen)" },
+      { command: "ui.type", params: { text: "hello" }, doc: "Type text into the focused widget (click a field first)" },
+      { command: "ui.key", params: { key: "Enter" }, doc: "Press a key (egui names: Enter, Escape, ArrowDown, A, F5...), optional modifiers: [\"Ctrl\"]" },
+      { command: "ui.drag", params: { from: [100, 100], to: [200, 200] }, doc: "Press, move, release — drawing comments, selecting text, moving things" },
+      { command: "ui.set", params: { key: "page", value: "2" }, doc: "View options: page, zoom, layout, theme, mode, default-mode..." },
+      { command: "ui.screenshot", params: {}, doc: "PNG of the window as png_base64 (needs the tab drawing — keep the window visible)" }
+    ],
     listCommands: function (filter) {
+      var self = this;
       return window.pdfcraft.commands().then(function (wrapped) {
-        var cmds = wrapped && wrapped.commands instanceof Array ? wrapped.commands : wrapped;
+        var cmds = wrapped && wrapped.commands instanceof Array ? wrapped.commands : [];
         var f = (filter || "").toLowerCase();
-        if (!f) return cmds;
-        return cmds instanceof Array
-          ? cmds.filter(function (c) { return JSON.stringify(c).toLowerCase().indexOf(f) !== -1; })
-          : { note: "catalog not an array; raw follows", raw: cmds, filter: filter };
+        var match = function (c) { return !f || JSON.stringify(c).toLowerCase().indexOf(f) !== -1; };
+        // Registry commands run as the menu would (no params). The agent
+        // methods (control channel + form filling) take JSON params — they are
+        // what an agent uses to read and set values.
+        var registry = cmds.filter(match).map(function (c) { c.source = "menu"; return c; });
+        var methods = self.agentMethods.filter(match).map(function (c) { c.source = "agent"; return c; });
+        return registry.concat(methods);
       });
     },
     runCommand: function (command, params) {

@@ -86,10 +86,13 @@ and PhotoCraft `0.5.0-main4` (`window.photocraft`, 851 commands — a minimal
 fork of `main@0c72d95`; patch in `docs/photocraft-agent-api.patch`, PR
 candidate). PhotoCraft `get_image` renders the document composite
 engine-side (`document.render`), sidestepping eframe's web-screenshot limit.
-PdfCraft `0.5.0-main` (`window.pdfcraft` — the app's own M3.9 control
+PdfCraft `0.5.0-main2` (`window.pdfcraft` — the app's own M3.9 control
 channel: `ui.state/inspect/click/drag/type/key/command/commands/set`,
-`ui.screenshot` for `get_image`; patch in `docs/pdfcraft-agent-api.patch`, PR
-candidate; every save/export also lands in an in-memory agent file table).
+`ui.screenshot` for `get_image`; fork v2 adds `form.fields` (name/kind/value/
+options) and `form.set` / `form.set_many` / `form.reset` / `form.import`
+(XFDF/FDF/XML/CSV) — undoable programmatic form filling, no clicking needed;
+patch in `docs/pdfcraft-agent-api.patch`, PR candidate; every save/export
+also lands in an in-memory agent file table).
 VectorCraft's web build exposes no in-page agent API yet (checked 2026-10).
 
 **Note on EffectCraft and FilmCraft:** both engines answer agent requests on
