@@ -287,7 +287,10 @@
       if (args.url) {
         return Promise.reject(new Error("PhotoCraft import from URL is not supported; pass base64"));
       }
-      return window.photocraft.importBytes(args.name, window.CraftRelayFileKit.fromBase64(args.base64));
+      // importBytes returns a plain result object synchronously (or an Error).
+      var r = window.photocraft.importBytes(args.name, window.CraftRelayFileKit.fromBase64(args.base64));
+      if (r instanceof Error) return Promise.reject(r);
+      return r;
     }
   };
 

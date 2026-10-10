@@ -250,7 +250,10 @@
         pushLog({ t: Date.now(), tool: "send_file:" + (args.path || ""), ms: Math.round(performance.now() - t0) });
         reply(m.id, true, r);
       }, fail);
-      else if (tool === "put_file") adapter.importFile(args).then(done, fail);
+      else if (tool === "put_file") Promise.resolve(adapter.importFile(args)).then(function (r) {
+        if (r instanceof Error) throw r;
+        return r;
+      }).then(done, fail);
       else reply(m.id, false, "unknown tool " + tool);
     } catch (e) { fail(e); }
   }
