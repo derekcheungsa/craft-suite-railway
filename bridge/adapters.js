@@ -294,18 +294,31 @@
       return uploadBytes(function (p) { return window.photocraft.readFile(p); }, path, url, method);
     },
     importFile: function (args) {
-      // fork v2: window.photocraft.importBytes(name, Uint8Array) delivers the
+      // fork v2+: window.photocraft.importBytes(name, Uint8Array) delivers the
       // file through the same inbox as a drag-and-drop (opens as a document).
       if (typeof window.photocraft.importBytes !== "function") {
-        return Promise.reject(new Error("this PhotoCraft build predates importBytes — redeploy the suite (PHOTOCRAFT_URL must point at the main2 build)"));
+        return Promise.reject(new Error("this PhotoCraft build predates importBytes — redeploy the suite (PHOTOCRAFT_URL must point at the main2+ build)"));
       }
+      var deliver = function (name, bytes) {
+        var r = window.photocraft.importBytes(name, bytes);
+        if (r instanceof Error) throw r;
+        return r;
+      };
       if (args.url) {
-        return Promise.reject(new Error("PhotoCraft import from URL is not supported; pass base64"));
+        // Fetch in the page so big files never enter the conversation. The
+        // page is cross-origin isolated (COEP), so the URL must send CORS
+        // headers (most image hosts and raw.githubusercontent do).
+        var name = args.name || args.url.split(/[?#]/)[0].split("/").pop() || "download";
+        return fetch(args.url, { mode: "cors" }).then(function (resp) {
+          if (!resp.ok) throw new Error(args.url + ": HTTP " + resp.status);
+          return resp.arrayBuffer();
+        }).then(function (buf) {
+          return deliver(name, new Uint8Array(buf));
+        }, function (e) {
+          throw new Error("fetch failed (does the URL send Access-Control-Allow-Origin? " + (e && e.message ? e.message : e) + ")");
+        });
       }
-      // importBytes returns a plain result object synchronously (or an Error).
-      var r = window.photocraft.importBytes(args.name, window.CraftRelayFileKit.fromBase64(args.base64));
-      if (r instanceof Error) return Promise.reject(r);
-      return r;
+      return deliver(args.name, window.CraftRelayFileKit.fromBase64(args.base64));
     }
   };
 
