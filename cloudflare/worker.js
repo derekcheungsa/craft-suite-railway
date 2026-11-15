@@ -1,5 +1,11 @@
 // Craft Suite on Cloudflare: a Worker serving the site from an R2 bucket.
 //
+// Since Nov 15, 2026 every file under 25 MiB is also deployed as a static asset
+// (cloudflare/split_assets.py, headers in its _headers file). Cloudflare serves
+// those without running this Worker, so they are free and don't count toward
+// the free plan's 100,000 requests a day. This Worker now runs only for the big
+// .wasm files, /relay/, /healthz and paths that match no asset.
+//
 // Why not Cloudflare Pages: Pages caps each file at 25 MiB, and ten of the apps'
 // .wasm files are bigger (up to ~85 MB). R2 has no such cap and its downloads
 // are free. This Worker does what nginx/templates/default.conf.template does on

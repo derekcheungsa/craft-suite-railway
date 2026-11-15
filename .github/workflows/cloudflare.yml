@@ -1,7 +1,8 @@
 # Publish the Craft Suite on Cloudflare's free plan: build the site exactly as the
 # Dockerfile does (cloudflare/build_site.py reads its app versions), upload what
-# changed to R2 (cloudflare/sync_r2.py) and deploy the Worker that serves it
-# (cloudflare/worker.js). Runs on every push to main that touches the site, and
+# changed to R2 (cloudflare/sync_r2.py), copy the files under 25 MiB into the
+# static assets folder (cloudflare/split_assets.py) and deploy the Worker with
+# those assets (cloudflare/worker.js serves the rest from R2). Runs on every push to main that touches the site, and
 # by hand from the Actions tab. See cloudflare/README.md.
 #
 # Needs two repository secrets: CLOUDFLARE_API_TOKEN (Workers Scripts: Edit,
@@ -62,7 +63,11 @@ jobs:
         if: steps.ready.outputs.ok == 'true'
         run: python3 -I cloudflare/sync_r2.py "$RUNNER_TEMP/site" craft-suite-site
 
-      - name: Deploy the Worker
+      - name: Static assets (every file under 25 MiB)
+        if: steps.ready.outputs.ok == 'true'
+        run: python3 -I cloudflare/split_assets.py "$RUNNER_TEMP/site" cloudflare/public
+
+      - name: Deploy the Worker and static assets
         if: steps.ready.outputs.ok == 'true'
         working-directory: cloudflare
         run: $WRANGLER deploy

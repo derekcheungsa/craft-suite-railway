@@ -1,9 +1,15 @@
-# Craft Suite on Cloudflare (free plan): a Worker serving the site from R2.
+# Craft Suite on Cloudflare (free plan): small files are static assets (free and
+# unlimited); the Worker serves the big .wasm files from R2 and the /relay/ proxy.
 # Deployed by .github/workflows/cloudflare.yml; see cloudflare/README.md.
 name = "craft-suite"
 main = "worker.js"
 compatibility_date = "2026-11-01"
 workers_dev = true
+
+# Filled by cloudflare/split_assets.py during the publish workflow. Requests that
+# match a file here never run the Worker; everything else falls through to it.
+[assets]
+directory = "./public"
 
 [[r2_buckets]]
 binding = "SITE"
