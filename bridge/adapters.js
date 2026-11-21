@@ -289,6 +289,41 @@
     listFiles: function () {
       return window.photocraft.files();
     },
+    /* Craft Cloud: the open document as a full-size PNG. The web build can't
+     * "Save a Copy" (no file system), so this exports a flattened duplicate
+     * (image.duplicate → layer.flattenImage → layer.exportAs → close), which
+     * leaves the user's document and its undo history untouched. */
+    currentName: function () {
+      return window.photocraft.inspect().then(function (ins) {
+        var d = ins && ins.document;
+        return d ? String(d.name || "Untitled").replace(/\.[a-z0-9]{2,5}$/i, "") + ".png" : null;
+      }, function () { return null; });
+    },
+    saveCurrent: function () {
+      var pc = window.photocraft, path = "/craft-cloud/" + Date.now() + ".png", dup = false;
+      return pc.inspect().then(function (ins) {
+        if (!ins || !ins.document) throw new Error("open or create a document in PhotoCraft first");
+        return pc.execute("image.duplicate", {});
+      }).then(function () {
+        dup = true;
+        return pc.execute("layer.flattenImage", {});
+      }).then(function () {
+        return pc.execute("layer.exportAs", { path: path });
+      }).then(function () {
+        dup = false;
+        return pc.execute("file.close", { discard: true });
+      }).then(function () {
+        return pc.readFile(path);
+      }).then(function (bytes) {
+        try { pc.removeFile(path); } catch (e) { /* ignore */ }
+        if (!bytes || bytes instanceof Error) throw new Error("the export didn't produce a file");
+        return bytes;
+      }, function (e) {
+        // Never leave the duplicate open; never close the user's own document.
+        var close = dup ? pc.execute("file.close", { discard: true }).catch(function () {}) : Promise.resolve();
+        return close.then(function () { throw e; });
+      });
+    },
     file: function (path) {
       return window.photocraft.readFile(path).then(function (bytes) {
         if (bytes && bytes instanceof Error) throw bytes;

@@ -697,9 +697,30 @@
     var used = s.limitBytes ? mb(s.usedBytes) + " of " + mb(s.limitBytes) + " used" : mb(s.usedBytes) + " used";
     c.appendChild(el("div", { class: "csub", text: (s.mode === "own" ? "Private and permanent · " : "Private · ") + used }));
 
-    // Save one of this app's files.
+    // Save the open document (apps that can export it), or one of the app's files.
     var adapter = state.adapter;
-    if (adapter && adapter.listFiles && adapter.file) {
+    if (adapter && adapter.saveCurrent) {
+      var nameIn = el("input", { type: "text", class: "cname", spellcheck: "false", placeholder: "name.png" });
+      var saveDoc = el("button", { class: "mini primary", text: "Save to cloud" });
+      Promise.resolve(adapter.currentName()).then(function (n) {
+        if (n) nameIn.value = n;
+        else { nameIn.placeholder = "open a document first"; }
+      });
+      saveDoc.addEventListener("click", function () {
+        var name = (nameIn.value || "").trim();
+        if (!name) { cloudMsg("open a document first, then name it", true); return; }
+        if (!/\.png$/i.test(name)) name += ".png";
+        saveDoc.disabled = true;
+        cloudMsg("saving " + name + "…");
+        Promise.resolve(adapter.saveCurrent()).then(function (bytes) { return cloud.put(name, bytes); }).then(function (r) {
+          cloudMsg("saved " + name + (r.version > 1 ? " (version " + r.version + ")" : ""));
+          pushLog({ t: Date.now(), tool: "cloud ← " + name });
+        }, function (e) { cloudMsg(e.message, true); }).then(function () { saveDoc.disabled = false; });
+      });
+      c.appendChild(el("div", { class: "csub", text: "This document:" }));
+      c.appendChild(el("div", { class: "csave" }, [nameIn, saveDoc]));
+    }
+    if (adapter && adapter.listFiles && adapter.file && !adapter.saveCurrent) {
       var pick = el("select", { class: "cpick" });
       var saveBtn = el("button", { class: "mini", text: "Save to cloud" });
       saveBtn.addEventListener("click", function () {
@@ -825,7 +846,9 @@
       ".clink { color:#b7aefb; }",
       ".cgo { display:block; text-align:center; text-decoration:none; border-radius:8px; padding:7px 0; margin-bottom:6px; font-weight:600; background:#6d5df6; color:#fff; }",
       ".clinkbtn { border:0; background:none; padding:0; color:#9a9daa; font-size:11px; cursor:pointer; text-decoration:underline; }",
-      ".cloud input[type=text],.cloud input[type=password] { margin:2px 0 6px; }"
+      ".cloud input[type=text],.cloud input[type=password] { margin:2px 0 6px; }",
+      ".cloud .csave input.cname { flex:1; min-width:0; margin:0; padding:3px 6px; font:11.5px system-ui,sans-serif; }",
+      "button.mini.primary { background:#6d5df6; color:#fff; }"
     ].join("\n") });
     root.appendChild(style);
 
