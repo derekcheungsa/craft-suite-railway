@@ -119,3 +119,22 @@ the page shows a persistent indicator.
 5. Retrieve: `get_file` (small) or `send_file` to a URL you control (large).
 
 See `docs/PRD-Craft-Relay.pdf` for the design document.
+
+## License
+
+Licensed under either of
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or <https://www.apache.org/licenses/LICENSE-2.0>)
+- MIT license ([LICENSE-MIT](LICENSE-MIT) or <https://opensource.org/licenses/MIT>)
+
+at your option.
+
+This license covers the template code in this repository (Dockerfile, portal,
+server, bridge, nginx config and docs). The Craft apps themselves are pulled from
+their upstream repositories and remain under their own licenses.
+
+### Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in this work by you, as defined in the Apache-2.0 license, shall be
+dual licensed as above, without any additional terms or conditions.
