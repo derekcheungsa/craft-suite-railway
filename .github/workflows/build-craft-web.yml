@@ -9,7 +9,11 @@
 # to that file (or this workflow) builds every entry whose release doesn't
 # exist yet; "Run workflow" on the Actions tab does the same by hand.
 # An entry with "patch": true gets the agent API added first by
-# .github/craft-web-patches/patch.py (apps whose upstream main lacks it).
+# .github/craft-web-patches/patch.py (apps whose upstream main lacks it), or, with
+# "patchfile", by applying that patch file from this repo (PhotoCraft: docs/photocraft-agent-api.patch).
+# Every "patch" entry is then run through .github/craft-web-patches/debrand.py, which removes the
+# ArtCraft name and mark from the interface (the brand licence doesn't allow modified builds to
+# carry them) and leaves the plain-text credit "Based on <App> by the ArtCraft team".
 # An entry with "mirror": true copies upstream's own release zip (ref = its tag) unchanged.
 name: Build Craft web apps
 
@@ -73,8 +77,18 @@ jobs:
           path: self
 
       - name: Add the agent API (window.${{ matrix.app }})
-        if: steps.name.outputs.exists != 'true' && !matrix.mirror && matrix.patch
+        if: steps.name.outputs.exists != 'true' && !matrix.mirror && matrix.patch && !matrix.patchfile
         run: python3 -I self/.github/craft-web-patches/patch.py "$APP" upstream
+
+      - name: Add the agent API from the patch file (window.${{ matrix.app }})
+        if: steps.name.outputs.exists != 'true' && !matrix.mirror && matrix.patch && matrix.patchfile
+        env:
+          PATCHFILE: ${{ matrix.patchfile }}
+        run: git -C upstream apply --whitespace=nowarn "$GITHUB_WORKSPACE/self/$PATCHFILE"
+
+      - name: Remove the ArtCraft name and mark from the interface
+        if: steps.name.outputs.exists != 'true' && !matrix.mirror && matrix.patch
+        run: python3 -I self/.github/craft-web-patches/debrand.py "$APP" upstream
 
       - name: Fonts (storytold/craft-fonts)
         if: steps.name.outputs.exists != 'true' && !matrix.mirror
@@ -113,10 +127,31 @@ jobs:
 
       - name: Check the build has the agent API
         if: steps.name.outputs.exists != 'true' && !matrix.mirror
+        env:
+          PATCHFILE: ${{ matrix.patchfile }}
         run: |
-          # craft-web-api installs window.<app> from the wasm; its JS glue names the methods.
-          grep -rqE 'docInspect|uiInspect' site || { echo "no craft-web-api in the build"; exit 1; }
+          if [ -n "$PATCHFILE" ]; then
+            # PhotoCraft's own api.rs (not craft-web-api): its method names sit in the wasm.
+            grep -rqa 'importBytes' site || { echo "no window.$APP API in the build"; exit 1; }
+          else
+            # craft-web-api installs window.<app> from the wasm; its JS glue names the methods.
+            grep -rqE 'docInspect|uiInspect' site || { echo "no craft-web-api in the build"; exit 1; }
+          fi
           grep -Eq '(src|href)="/[^/]' site/index.html && { echo "root-absolute URLs in index.html"; exit 1; } || true
+
+      - name: Check the build for the ArtCraft name
+        if: steps.name.outputs.exists != 'true' && !matrix.mirror && matrix.patch
+        run: |
+          # Text, JS glue and wasm alike. Only the credit line and link targets
+          # (discord.gg/artcraft, getartcraft.com) may remain. Translation catalogs are compressed
+          # inside the wasm, so debrand.py has already checked their source.
+          left=$(grep -rao -iE '[ -~]*artcraft[ -~]*' site \
+            | sed -E 's/getartcraft\.com//Ig; s#discord\.gg/artcraft##Ig; s/Based on [A-Za-z]+ by the ArtCraft team//g' \
+            | grep -i artcraft || true)
+          if [ -n "$left" ]; then
+            echo "the ArtCraft name is still in the build:"; echo "$left" | head -40; exit 1
+          fi
+          echo "no ArtCraft name in the built files (outside the credit line and link targets)"
 
       - name: Zip
         if: steps.name.outputs.exists != 'true' && !matrix.mirror
@@ -160,7 +195,7 @@ jobs:
           elif [ "$PATCHED" != "true" ]; then
             notes="Web build of storytold/${APP}@${REF} (unreleased upstream source, unmodified), by .github/workflows/build-craft-web.yml. Not an official ArtCraft release. $ind"
           else
-            notes="Modified web build of storytold/${APP}@${REF}: built from upstream source with a small patch that adds the in-page Claude API (.github/craft-web-patches), by .github/workflows/build-craft-web.yml. Not an official ArtCraft release. $ind"
+            notes="Modified web build of storytold/${APP}@${REF}: built from upstream source with a small patch that adds the in-page Claude API, and with the ArtCraft name and marks removed from the interface (.github/craft-web-patches); the About window says \"Based on ${APP} by the ArtCraft team\". Built by .github/workflows/build-craft-web.yml. Not an official ArtCraft release. $ind"
           fi
           gh release create "${{ steps.name.outputs.tag }}" "${{ steps.name.outputs.asset }}" \
             -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
