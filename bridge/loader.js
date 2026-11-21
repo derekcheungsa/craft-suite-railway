@@ -633,8 +633,25 @@
     c.appendChild(head);
     var msg = el("div", { class: "cmsg", style: "display:none;" });
 
-    if (s.mode === "claimed") {
-      c.appendChild(el("div", { class: "csub", text: s.message || "Claimed: set DATABASE_URL on the cloud service." }));
+    if (s.mode === "claimed" && s.user) {
+      // One last step after a claim: Neon changed the database password.
+      var conn = el("input", { type: "password", placeholder: "postgresql://…", spellcheck: "false", autocomplete: "off" });
+      var connect = el("button", { class: "act", text: "Reconnect", onclick: function () {
+        if (!conn.value.trim()) { cloudMsg("paste the connection string first", true); return; }
+        connect.disabled = true;
+        cloudMsg("checking and reconnecting…");
+        cloudFetch("/connect", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ databaseUrl: conn.value.trim() }) })
+          .then(function () { cloudChanged(); }, function (e) { cloudMsg(e.message, true); connect.disabled = false; });
+      } });
+      c.appendChild(el("div", { class: "csub", text: "It's yours now. One last step: Neon gave the database a new password, so paste its connection string here." }));
+      var steps = el("div", { class: "csub" });
+      steps.appendChild(document.createTextNode("In "));
+      steps.appendChild(el("a", { href: s.neonConsoleUrl || "https://console.neon.tech", target: "_blank", rel: "noopener", text: "your project in Neon", style: "color:#b7aefb;" }));
+      steps.appendChild(document.createTextNode(", click Connect, then copy the connection string."));
+      c.appendChild(steps);
+      c.appendChild(conn);
+      c.appendChild(el("div", { class: "row" }, [connect]));
+      c.appendChild(msg);
       return;
     }
     if (!s.user) {
@@ -646,12 +663,14 @@
         cloud.auth(kind, email.value.trim(), pw.value).then(function () { cloudChanged(); }, function (e) { cloudMsg(e.message, true); });
       };
       pw.addEventListener("keydown", function (ev) { if (ev.key === "Enter") { ev.preventDefault(); go("sign-in"); } });
-      c.appendChild(el("div", { class: "csub", text: "Save your work to the cloud and open it in any app, on any device. Your work stays only in this browser until you sign in." }));
+      c.appendChild(el("div", { class: "csub", text: s.mode === "claimed"
+        ? "This cloud was just claimed in Neon. Its owner signs in here to finish reconnecting it."
+        : "Save your work to the cloud and open it in any app, on any device. Your work stays only in this browser until you sign in." }));
       c.appendChild(email);
       c.appendChild(pw);
       c.appendChild(el("div", { class: "row" }, [
         el("button", { class: "act", text: "Sign in", onclick: function () { go("sign-in"); } }),
-        el("button", { class: "act ghost", text: "Create account", onclick: function () { go("sign-up"); } })
+        s.mode === "claimed" ? null : el("button", { class: "act ghost", text: "Create account", onclick: function () { go("sign-up"); } })
       ]));
       c.appendChild(msg);
       return;
@@ -725,7 +744,7 @@
           var w = window.open("about:blank", "_blank");
           (s.claimUrl ? Promise.resolve({ url: s.claimUrl }) : cloud.claim()).then(function (r) {
             if (w) w.location.href = r.url; else window.open(r.url, "_blank", "noopener");
-            cloudMsg("Finish in the Neon tab. Then copy the project's connection string into the craft-cloud service's DATABASE_URL on Railway.");
+            cloudMsg("Finish in the Neon tab, then come back here: you'll paste one connection string to reconnect.");
           }, function (e) { if (w) w.close(); cloudMsg(e.message, true); });
         } }));
       } else {

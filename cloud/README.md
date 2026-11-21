@@ -32,9 +32,14 @@ An unclaimed project lasts **72 hours**. To keep it:
 
 1. Sign in as the owner, open the ⦿ panel and click **Keep it: claim in Neon**.
 2. In the Neon tab, sign in and accept the transfer.
-3. Claiming rotates the database password. In the Neon console, copy the project's
-   connection string and set it as `DATABASE_URL` on the `craft-cloud` service.
-   Railway redeploys it, and your files and accounts are all still there.
+3. Claiming gives the database a new password, so the panel asks for it once: open
+   the project in Neon (the panel links to it), click **Connect**, copy the
+   connection string and paste it into the panel. The service checks that the
+   database holds this cloud and that you are its owner, reconnects and remembers
+   it on its volume. No Railway settings, no redeploy; files and accounts are all
+   still there.
+
+(Setting `DATABASE_URL` on the service still works too, and takes precedence.)
 
 If an unclaimed project expires, the next start creates a new, empty one.
 
@@ -62,5 +67,6 @@ If an unclaimed project expires, the next start creates a new, empty one.
 | `GET /files/<name>/versions` | Version history |
 | `DELETE /files/<name>` | Delete every version |
 | `POST /claim` | Owner only: start the Neon claim, returns the link |
+| `POST /connect` | Owner only, after a claim: `{ databaseUrl }`, the claimed project's new connection string |
 
 Requests that change anything must come from a page on the same site.
