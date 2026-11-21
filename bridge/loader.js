@@ -612,10 +612,10 @@
   var cloudChannel = null;
   try { cloudChannel = new BroadcastChannel("craft-cloud"); cloudChannel.onmessage = function () { renderCloud(); }; } catch (e) { /* older browser */ }
   function cloudChanged() { renderCloud(); try { if (cloudChannel) cloudChannel.postMessage("changed"); } catch (e) { /* ignore */ } }
-  function mb(n) { return n < 1048576 ? Math.max(1, Math.round(n / 1024)) + " KB" : (n / 1048576).toFixed(n < 10485760 ? 1 : 0) + " MB"; }
+  function mb(n) { return !n ? "0 KB" : n < 1048576 ? Math.max(1, Math.round(n / 1024)) + " KB" : (n / 1048576).toFixed(n < 10485760 ? 1 : 0) + " MB"; }
   function untilText(iso) {
     var h = Math.max(0, (Date.parse(iso) - Date.now()) / 3600000);
-    return h >= 48 ? Math.floor(h / 24) + " days" : h >= 1 ? Math.floor(h) + " hours" : Math.ceil(h * 60) + " minutes";
+    return h >= 36 ? Math.round(h / 24) + " days" : h >= 1 ? Math.floor(h) + " hours" : Math.ceil(h * 60) + " minutes";
   }
   function cloudMsg(t, bad) {
     var m = cloudEl && cloudEl.querySelector(".cmsg");
@@ -633,33 +633,69 @@
     c.appendChild(head);
     var msg = el("div", { class: "cmsg", style: "display:none;" });
 
-    if (s.mode === "claimed") {
-      c.appendChild(el("div", { class: "csub", text: s.message || "Claimed: set DATABASE_URL on the cloud service." }));
+    // After a claim: the owner pastes the project's new connection string once.
+    if (s.mode === "claimed" && s.user) {
+      var conn = el("input", { type: "password", placeholder: "postgresql://…", spellcheck: "false", autocomplete: "off" });
+      var connect = el("button", { class: "act", text: "Reconnect", onclick: function () {
+        if (!conn.value.trim()) { cloudMsg("paste the connection string first", true); return; }
+        connect.disabled = true;
+        cloudMsg("checking and reconnecting…");
+        cloudFetch("/connect", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ databaseUrl: conn.value.trim() }) })
+          .then(function () { cloudChanged(); }, function (e) { cloudMsg(e.message, true); connect.disabled = false; });
+      } });
+      c.appendChild(el("div", { class: "csub", text: "It's yours now. One last step: Neon gave the database a new password, so paste its connection string here." }));
+      var steps = el("div", { class: "csub" });
+      steps.appendChild(document.createTextNode("In "));
+      steps.appendChild(el("a", { href: s.neonConsoleUrl || "https://console.neon.tech", target: "_blank", rel: "noopener", text: "your project in Neon", class: "clink" }));
+      steps.appendChild(document.createTextNode(", click Connect, then copy the connection string."));
+      c.appendChild(steps);
+      c.appendChild(conn);
+      c.appendChild(el("div", { class: "row" }, [connect]));
+      c.appendChild(msg);
       return;
     }
+
     if (!s.user) {
       var email = el("input", { type: "text", placeholder: "email", spellcheck: "false", autocomplete: "username" });
-      var pw = el("input", { type: "password", placeholder: "password", autocomplete: "current-password" });
+      var pw = el("input", { type: "password", placeholder: "password", autocomplete: s.hasOwner ? "current-password" : "new-password" });
       var go = function (kind) {
         if (!email.value.trim() || !pw.value) { cloudMsg("email and password are both required", true); return; }
-        cloudMsg(kind === "sign-up" ? "creating your account…" : "signing in…");
+        cloudMsg(kind === "sign-up" ? "setting up your cloud…" : "signing in…");
         cloud.auth(kind, email.value.trim(), pw.value).then(function () { cloudChanged(); }, function (e) { cloudMsg(e.message, true); });
       };
-      pw.addEventListener("keydown", function (ev) { if (ev.key === "Enter") { ev.preventDefault(); go("sign-in"); } });
-      c.appendChild(el("div", { class: "csub", text: "Save your work to the cloud and open it in any app, on any device. Your work stays only in this browser until you sign in." }));
-      c.appendChild(email);
-      c.appendChild(pw);
-      c.appendChild(el("div", { class: "row" }, [
-        el("button", { class: "act", text: "Sign in", onclick: function () { go("sign-in"); } }),
-        el("button", { class: "act ghost", text: "Create account", onclick: function () { go("sign-up"); } })
-      ]));
-      c.appendChild(msg);
+      var setup = !s.hasOwner && s.mode !== "claimed";
+      pw.addEventListener("keydown", function (ev) { if (ev.key === "Enter") { ev.preventDefault(); go(setup ? "sign-up" : "sign-in"); } });
+      var form = el("div", {}, [
+        email, pw,
+        el("div", { class: "row" }, [el("button", { class: "act", text: setup ? "Create my account" : "Sign in", onclick: function () { go(setup ? "sign-up" : "sign-in"); } })]),
+        msg
+      ]);
+
+      if (setup) {
+        // First visit to a fresh copy: whoever creates the first account owns it.
+        c.appendChild(el("div", { class: "csub", text: "Save your work to the cloud and open it in any app, on any device. Create the account that owns this cloud: after that, only you can sign in." }));
+        c.appendChild(form);
+        return;
+      }
+      if (s.mode === "claimed") {
+        c.appendChild(el("div", { class: "csub", text: "This cloud was just claimed in Neon. Its owner signs in here to finish reconnecting it." }));
+        c.appendChild(form);
+        return;
+      }
+      // Everyone else: their work stays local; offer them a private copy of their own.
+      c.appendChild(el("div", { class: "csub", text: "Your work is saved in this browser. Want it in the cloud too, on every device? Get your own private copy of Craft Suite, free, in one click." }));
+      c.appendChild(el("a", { class: "cgo", href: s.templateUrl || "https://railway.com/deploy/craft-suite", target: "_blank", rel: "noopener", text: "Get my own copy ↗" }));
+      form.style.display = "none";
+      var ownerLink = el("button", { class: "clinkbtn", text: "Owner? Sign in", onclick: function () { form.style.display = "block"; ownerLink.style.display = "none"; email.focus(); } });
+      c.appendChild(ownerLink);
+      c.appendChild(form);
       return;
     }
 
     head.appendChild(el("span", { class: "cwho", text: s.user.email || "signed in" }));
     head.appendChild(el("button", { class: "mini", text: "Sign out", onclick: function () { cloud.signOut().then(cloudChanged); } }));
-    c.appendChild(el("div", { class: "csub", text: s.limitBytes ? mb(s.usedBytes) + " of " + mb(s.limitBytes) + " used" : mb(s.usedBytes) + " used" }));
+    var used = s.limitBytes ? mb(s.usedBytes) + " of " + mb(s.limitBytes) + " used" : mb(s.usedBytes) + " used";
+    c.appendChild(el("div", { class: "csub", text: (s.mode === "own" ? "Private and permanent · " : "Private · ") + used }));
 
     // Save one of this app's files.
     var adapter = state.adapter;
@@ -672,7 +708,7 @@
         saveBtn.disabled = true;
         cloudMsg("saving " + baseName(p) + "…");
         Promise.resolve(adapter.file(p)).then(function (bytes) { return cloud.put(baseName(p), bytes); }).then(function (r) {
-          cloudMsg("saved " + baseName(p) + " (version " + r.version + ")");
+          cloudMsg("saved " + baseName(p) + (r.version > 1 ? " (version " + r.version + ")" : ""));
           pushLog({ t: Date.now(), tool: "cloud ← " + baseName(p) });
         }, function (e) { cloudMsg(e.message, true); }).then(function () { saveBtn.disabled = false; });
       });
@@ -711,27 +747,27 @@
         } });
         listEl.appendChild(el("div", { class: "cfile" }, [
           el("span", { text: f.name, title: f.name + (f.app ? " — from " + f.app : "") }),
-          el("i", { text: "v" + f.version + " · " + mb(f.size) }),
+          el("i", { text: (f.versions > 1 ? f.versions + " versions · " : "") + mb(f.size) }),
           openBtn, dl
         ]));
       });
     }, function (e) { listEl.textContent = e.message; });
 
+    // Unclaimed: nudge to keep it once there's something worth keeping, or when time is short.
     if (s.mode === "unclaimed") {
-      var keep = el("div", { class: "ckeep" });
-      keep.appendChild(el("div", { text: "This cloud is a free Neon project that is deleted in " + untilText(s.expiresAt) + " unless it's claimed." }));
-      if (s.user.owner) {
-        keep.appendChild(el("button", { class: "mini", text: s.claimUrl ? "Continue claiming in Neon" : "Keep it: claim in Neon", onclick: function () {
+      var hoursLeft = (Date.parse(s.expiresAt) - Date.now()) / 3600000;
+      if (s.usedBytes > 0 || hoursLeft < 24) {
+        var keep = el("div", { class: "ckeep" + (hoursLeft < 24 ? " urgent" : "") });
+        keep.appendChild(el("div", { text: "This cloud is temporary: " + untilText(s.expiresAt) + " left. Keep it free with a Neon account; your files stay." }));
+        keep.appendChild(el("button", { class: "mini", text: s.claimUrl ? "Continue in Neon" : "Keep it free", onclick: function () {
           var w = window.open("about:blank", "_blank");
           (s.claimUrl ? Promise.resolve({ url: s.claimUrl }) : cloud.claim()).then(function (r) {
             if (w) w.location.href = r.url; else window.open(r.url, "_blank", "noopener");
-            cloudMsg("Finish in the Neon tab. Then copy the project's connection string into the craft-cloud service's DATABASE_URL on Railway.");
+            cloudMsg("Finish in the Neon tab, then come back here: you'll paste one connection string to reconnect.");
           }, function (e) { if (w) w.close(); cloudMsg(e.message, true); });
         } }));
-      } else {
-        keep.appendChild(el("div", { text: "The site's owner can claim it to keep it." }));
+        c.appendChild(keep);
       }
-      c.appendChild(keep);
     }
     c.appendChild(msg);
   }
@@ -785,6 +821,10 @@
       ".cfile i { font-style:normal; color:#6a6d78; white-space:nowrap; }",
       ".ckeep { margin-top:6px; padding:6px 8px; border-radius:6px; background:rgba(109,93,246,.1); border:1px solid rgba(109,93,246,.35); color:#c9ccd6; }",
       ".ckeep button { margin-top:4px; }",
+      ".ckeep.urgent { background:rgba(224,178,94,.12); border-color:rgba(224,178,94,.5); }",
+      ".clink { color:#b7aefb; }",
+      ".cgo { display:block; text-align:center; text-decoration:none; border-radius:8px; padding:7px 0; margin-bottom:6px; font-weight:600; background:#6d5df6; color:#fff; }",
+      ".clinkbtn { border:0; background:none; padding:0; color:#9a9daa; font-size:11px; cursor:pointer; text-decoration:underline; }",
       ".cloud input[type=text],.cloud input[type=password] { margin:2px 0 6px; }"
     ].join("\n") });
     root.appendChild(style);

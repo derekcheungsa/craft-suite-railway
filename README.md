@@ -108,15 +108,18 @@ Setup and free-plan limits are in [cloudflare/README.md](cloudflare/README.md).
 
 ## Craft Cloud: save to the cloud with Neon
 
-Open the ⦿ panel in any app and sign in under **Craft Cloud** to save files to a shared
-library: open them in any app, on any device, with every save kept as a version. Claude
+Your own copy of Craft Suite comes with a private cloud. Open the ⦿ panel in any app and
+create your account under **Craft Cloud** (the first account owns the cloud; after that
+only you can sign in) to save files to one library: open them in any app, on any device,
+with every save kept as a version. Visitors to your site keep using the apps with local
+saving, and the panel offers them a private copy of their own. Claude
 can use it too: `send_file` / `put_file` with `https://cloud/<name>`, and `list_files`
 shows the library. Until someone signs in, nothing leaves the browser.
 
 It runs on [Neon](https://neon.com) (Postgres + Neon Auth) and needs no Neon account to
 start: on first boot the `craft-cloud` service creates a claimable Neon project, which
 lasts 72 hours and holds 100 MB until the owner (the first account) claims it from the
-panel. Details, limits and variables: [cloud/README.md](cloud/README.md).
+panel and pastes the new connection string there. Details, limits and variables: [cloud/README.md](cloud/README.md).
 
 ## Claude: the Craft Relay
 

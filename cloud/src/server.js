@@ -36,6 +36,9 @@ const OWN_LIMIT_MB = parseInt(process.env.STORAGE_LIMIT_MB ?? "0", 10); // 0 = n
 const AUTH_ORIGIN = process.env.NEON_AUTH_ORIGIN ?? "http://localhost:3000";
 const NEON_SESSION_COOKIE = "__Secure-neon-auth.session_token";
 const COOKIE = "craft_cloud";
+// Where visitors get their own copy (shown to anyone who isn't this cloud's owner).
+const TEMPLATE_URL = process.env.TEMPLATE_URL ?? "https://railway.com/deploy/craft-suite";
+const PRIVATE_MSG = "This is a private cloud: only its owner can sign in. You can get your own private copy, free, in one click.";
 
 function log(ev, data) { console.log(JSON.stringify({ t: new Date().toISOString(), ev, ...data })); }
 
@@ -122,7 +125,14 @@ async function setup() {
       log("project_expired", { project: s.projectId });
       s = null; // its data is gone with it: start a fresh one
     }
-    if (s && s.mode === "claimed") { state = s; return; } // waits for DATABASE_URL
+    if (s && s.mode === "claimed") {
+      // Waiting for the owner to paste the claimed project's connection string
+      // (POST /connect). Neon Auth moved with the project, so sign-in still works.
+      state = s;
+      jwks = createRemoteJWKSet(new URL(state.jwksUrl));
+      log("ready", { mode: state.mode, project: state.projectId });
+      return;
+    }
     state = s ?? (await provision());
   }
   if (!state.authUrl) throw new Error("no Neon Auth URL: set NEON_AUTH_URL");
@@ -243,6 +253,7 @@ async function ownerId() {
   return r[0]?.value ?? null;
 }
 async function claimOwner(sub) {
+  if (!sql) return;
   // The first account becomes the owner: the only one who can claim the project.
   await sql`insert into craft_meta (key, value) values ('owner', ${sub}) on conflict (key) do nothing`;
 }
@@ -369,23 +380,28 @@ function sameOrigin(req) {
 }
 
 async function status(req) {
-  const user = state.mode === "claimed" ? null : await currentUser(req).catch(() => null);
+  const user = await currentUser(req).catch(() => null);
   const out = {
     mode: state.mode, // unclaimed | claimed (waiting for DATABASE_URL) | own
     project: state.projectId ?? null,
     expiresAt: state.mode === "unclaimed" ? state.expiresAt : null,
     user: user ? { id: user.sub, email: user.email, name: user.name } : null,
+    templateUrl: TEMPLATE_URL,
   };
   if (state.mode === "claimed") {
-    out.message = "Claimed. In the Neon console, copy this project's connection string into this Railway service's DATABASE_URL variable and redeploy.";
+    out.message = "Claimed. Paste the project's connection string from Neon to reconnect.";
+    out.neonConsoleUrl = `https://console.neon.tech/app/projects/${state.projectId}`;
     return out;
   }
+  const owner = await ownerId();
+  out.hasOwner = !!owner;
+  if (user && owner && owner !== user.sub) out.user = null; // an account from before the cloud went private
+  if (!out.user) return out; // visitors learn nothing about the owner's storage
   out.usedBytes = await usageBytes();
   out.limitBytes = limitBytes();
   out.maxFileBytes = MAX_FILE_MB * 1024 * 1024;
-  if (user) {
-    const owner = await ownerId();
-    out.user.owner = owner === user.sub;
+  if (out.user) {
+    out.user.owner = true;
     if (out.user.owner && state.mode === "unclaimed" && state.claim && Date.parse(state.claim.codeExpiresAt) > Date.now()) {
       out.claimUrl = state.claim.url;
     }
@@ -404,13 +420,16 @@ async function route(req, res) {
 
   await ensureReady();
   if (p === "/status" && method === "GET") return json(res, 200, await status(req));
-  if (state.mode === "claimed") throw httpError(503, "Craft Cloud was claimed: set DATABASE_URL on the cloud service to the claimed project's connection string");
+  const claimedOk = p === "/auth/sign-in" || p === "/auth/sign-out" || p === "/connect";
+  if (state.mode === "claimed" && !claimedOk) throw httpError(503, "Craft Cloud was claimed: its owner needs to paste the project's connection string from Neon in the Craft Cloud panel");
 
   if (p === "/auth/sign-up" || p === "/auth/sign-in") {
     if (method !== "POST") throw httpError(405, "POST only");
     const b = await readJson(req);
     const email = String(b.email ?? "").trim(), password = String(b.password ?? "");
     if (!email || !password) throw httpError(400, "email and password are required");
+    // One owner per cloud: the first account. After that, sign-ups are closed.
+    if (p === "/auth/sign-up" && (await ownerId())) return json(res, 403, { error: PRIVATE_MSG, code: "PRIVATE_CLOUD", templateUrl: TEMPLATE_URL });
     const r = p === "/auth/sign-up"
       ? await neonAuth("/sign-up/email", { body: { email, password, name: String(b.name ?? "").trim() || email.split("@")[0] } })
       : await neonAuth("/sign-in/email", { body: { email, password } });
@@ -420,6 +439,12 @@ async function route(req, res) {
     const user = await currentUser({ headers: { cookie: `${COOKIE}=${encodeURIComponent(r.session)}` } });
     if (!user) throw httpError(502, "signed in, but Neon Auth did not issue a token");
     await claimOwner(user.sub);
+    const owner = sql ? await ownerId() : null; // claimed and not reconnected yet: /connect checks the owner
+    if (owner && owner !== user.sub) {
+      jwtCache.delete(r.session);
+      await neonAuth("/sign-out", { session: r.session, body: {} }).catch(() => {});
+      return json(res, 403, { error: PRIVATE_MSG, code: "PRIVATE_CLOUD", templateUrl: TEMPLATE_URL });
+    }
     log(p === "/auth/sign-up" ? "sign_up" : "sign_in", { user: user.sub });
     return json(res, 200, { user: { id: user.sub, email: user.email, name: user.name } }, { "Set-Cookie": sessionCookie(req, r.session, 7 * 24 * 3600) });
   }
@@ -431,6 +456,10 @@ async function route(req, res) {
 
   const user = await currentUser(req);
   if (!user) throw httpError(401, "sign in to Craft Cloud first");
+  if (sql) {
+    const owner = await ownerId();
+    if (owner && owner !== user.sub) throw httpError(403, PRIVATE_MSG);
+  }
 
   if (p === "/files" && method === "GET") {
     const rows = await sql`select name, max(version)::int as version, count(*)::int as versions,
@@ -463,6 +492,37 @@ async function route(req, res) {
       const r = await sql`delete from craft_files where user_id = ${user.sub} and name = ${name} returning id`;
       return json(res, 200, { ok: true, deletedVersions: r.length });
     }
+  }
+
+  if (p === "/connect" && method === "POST") {
+    // After a claim Neon rotates the database password, so the owner pastes the
+    // project's new connection string here once. It must be a Neon database that
+    // already holds this cloud, owned by the signed-in user: having the string
+    // and being its owner is what authorizes the switch.
+    const b = await readJson(req);
+    const url = String(b.databaseUrl ?? "").trim().replace(/^psql\s+/, "").replace(/^['"]|['"]$/g, "");
+    let host;
+    try { const u = new URL(url); if (!/^postgres(ql)?:$/.test(u.protocol)) throw 0; host = u.hostname; } catch {
+      throw httpError(400, "that doesn't look like a connection string: it starts with postgresql://");
+    }
+    if (!/\.neon\.tech$/.test(host)) throw httpError(400, "that connection string isn't for a Neon database");
+    const candidate = neon(url);
+    let owner;
+    try { owner = (await candidate`select value from craft_meta where key = 'owner'`)[0]?.value ?? null; }
+    catch (e) {
+      const m = String(e.message ?? e);
+      if (/craft_meta.*does not exist/.test(m)) throw httpError(400, "that database doesn't hold this Craft Cloud: copy the connection string of the project you just claimed");
+      throw httpError(400, "couldn't connect with that connection string: " + m.slice(0, 120));
+    }
+    if (!owner) throw httpError(400, "that database doesn't hold this Craft Cloud: copy the connection string of the project you just claimed");
+    if (owner !== user.sub) throw httpError(403, "only the cloud's owner can reconnect it");
+    if (state.mode === "unclaimed") throw httpError(409, "this cloud isn't claimed yet");
+    state = { ...state, mode: "own", databaseUrl: url, assertion: undefined, claim: state.claim ? { ...state.claim, connectedAt: new Date().toISOString() } : undefined };
+    writeState(state);
+    sql = candidate;
+    await migrate();
+    log("connected", { project: state.projectId });
+    return json(res, 200, { ok: true, mode: state.mode });
   }
 
   if (p === "/claim") {
