@@ -10,8 +10,11 @@ under **Craft Cloud** in the ⦿ panel and saves a file.
 
 ## What it does
 
-- **Accounts:** Neon Auth (email and password). The first account becomes the
-  cloud's owner.
+- **Private to one owner:** Neon Auth (email and password). The first account
+  created on a new copy owns the cloud; after that, sign-ups close and only the
+  owner can sign in. Anyone else visiting the site keeps using the apps with
+  local saving, and the panel offers them a private copy of their own
+  (`TEMPLATE_URL`, the Railway template).
 - **Library:** files from any app, saved from the panel or by Claude with
   `https://cloud/<name>`. Every app tab on the site sees the same library, on any
   device.
@@ -53,6 +56,7 @@ If an unclaimed project expires, the next start creates a new, empty one.
 | `MAX_FILE_MB` | `50` | Largest single file. |
 | `UNCLAIMED_LIMIT_MB` | `80` | Storage cap before claim. |
 | `STORAGE_LIMIT_MB` | `0` (none) | Storage cap on your own project. |
+| `TEMPLATE_URL` | `https://railway.com/deploy/craft-suite` | Where the panel sends visitors to get their own private copy. |
 | `NEON_AUTH_ORIGIN` | `http://localhost:3000` | Origin sent to Neon Auth from this server. Unclaimed projects trust only localhost; after claiming you can add your site's domain in Neon and set it here. The server itself only accepts requests from pages on the same site. |
 
 ## API (under `/cloud/`)
@@ -60,7 +64,7 @@ If an unclaimed project expires, the next start creates a new, empty one.
 | | |
 |---|---|
 | `GET /status` | Mode (`unclaimed`, `claimed`, `own`), expiry, usage, signed-in user |
-| `POST /auth/sign-up`, `/auth/sign-in`, `/auth/sign-out` | `{ email, password }` |
+| `POST /auth/sign-up`, `/auth/sign-in`, `/auth/sign-out` | `{ email, password }`; sign-up only while the cloud has no owner |
 | `GET /files` | Library: newest version of each file |
 | `PUT /files/<name>?app=<app>` | Save (raw bytes); adds a version |
 | `GET /files/<name>[?v=N]` | Read the newest or a given version |

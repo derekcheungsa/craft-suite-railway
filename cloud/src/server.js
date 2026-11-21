@@ -36,6 +36,9 @@ const OWN_LIMIT_MB = parseInt(process.env.STORAGE_LIMIT_MB ?? "0", 10); // 0 = n
 const AUTH_ORIGIN = process.env.NEON_AUTH_ORIGIN ?? "http://localhost:3000";
 const NEON_SESSION_COOKIE = "__Secure-neon-auth.session_token";
 const COOKIE = "craft_cloud";
+// Where visitors get their own copy (shown to anyone who isn't this cloud's owner).
+const TEMPLATE_URL = process.env.TEMPLATE_URL ?? "https://railway.com/deploy/craft-suite";
+const PRIVATE_MSG = "This is a private cloud: only its owner can sign in. You can get your own private copy, free, in one click.";
 
 function log(ev, data) { console.log(JSON.stringify({ t: new Date().toISOString(), ev, ...data })); }
 
@@ -383,18 +386,22 @@ async function status(req) {
     project: state.projectId ?? null,
     expiresAt: state.mode === "unclaimed" ? state.expiresAt : null,
     user: user ? { id: user.sub, email: user.email, name: user.name } : null,
+    templateUrl: TEMPLATE_URL,
   };
   if (state.mode === "claimed") {
     out.message = "Claimed. Paste the project's connection string from Neon to reconnect.";
     out.neonConsoleUrl = `https://console.neon.tech/app/projects/${state.projectId}`;
     return out;
   }
+  const owner = await ownerId();
+  out.hasOwner = !!owner;
+  if (user && owner && owner !== user.sub) out.user = null; // an account from before the cloud went private
+  if (!out.user) return out; // visitors learn nothing about the owner's storage
   out.usedBytes = await usageBytes();
   out.limitBytes = limitBytes();
   out.maxFileBytes = MAX_FILE_MB * 1024 * 1024;
-  if (user) {
-    const owner = await ownerId();
-    out.user.owner = owner === user.sub;
+  if (out.user) {
+    out.user.owner = true;
     if (out.user.owner && state.mode === "unclaimed" && state.claim && Date.parse(state.claim.codeExpiresAt) > Date.now()) {
       out.claimUrl = state.claim.url;
     }
@@ -421,6 +428,8 @@ async function route(req, res) {
     const b = await readJson(req);
     const email = String(b.email ?? "").trim(), password = String(b.password ?? "");
     if (!email || !password) throw httpError(400, "email and password are required");
+    // One owner per cloud: the first account. After that, sign-ups are closed.
+    if (p === "/auth/sign-up" && (await ownerId())) return json(res, 403, { error: PRIVATE_MSG, code: "PRIVATE_CLOUD", templateUrl: TEMPLATE_URL });
     const r = p === "/auth/sign-up"
       ? await neonAuth("/sign-up/email", { body: { email, password, name: String(b.name ?? "").trim() || email.split("@")[0] } })
       : await neonAuth("/sign-in/email", { body: { email, password } });
@@ -430,6 +439,12 @@ async function route(req, res) {
     const user = await currentUser({ headers: { cookie: `${COOKIE}=${encodeURIComponent(r.session)}` } });
     if (!user) throw httpError(502, "signed in, but Neon Auth did not issue a token");
     await claimOwner(user.sub);
+    const owner = sql ? await ownerId() : null; // claimed and not reconnected yet: /connect checks the owner
+    if (owner && owner !== user.sub) {
+      jwtCache.delete(r.session);
+      await neonAuth("/sign-out", { session: r.session, body: {} }).catch(() => {});
+      return json(res, 403, { error: PRIVATE_MSG, code: "PRIVATE_CLOUD", templateUrl: TEMPLATE_URL });
+    }
     log(p === "/auth/sign-up" ? "sign_up" : "sign_in", { user: user.sub });
     return json(res, 200, { user: { id: user.sub, email: user.email, name: user.name } }, { "Set-Cookie": sessionCookie(req, r.session, 7 * 24 * 3600) });
   }
@@ -441,6 +456,10 @@ async function route(req, res) {
 
   const user = await currentUser(req);
   if (!user) throw httpError(401, "sign in to Craft Cloud first");
+  if (sql) {
+    const owner = await ownerId();
+    if (owner && owner !== user.sub) throw httpError(403, PRIVATE_MSG);
+  }
 
   if (p === "/files" && method === "GET") {
     const rows = await sql`select name, max(version)::int as version, count(*)::int as versions,
