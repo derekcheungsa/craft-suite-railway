@@ -1,4 +1,4 @@
-import { defineRailway, github, project, service } from "railway/iac";
+import { defineRailway, github, project, service, volume } from "railway/iac";
 
 // Matches the live Railway project. Nothing applies this
 // file automatically; keep it in step with Railway if you change settings there.
@@ -22,8 +22,21 @@ export default defineRailway(() => {
     replicas: { "us-east4-eqdc4a": 1 },
   });
 
+  // Craft Cloud: sign-in, file library and versions on Neon (cloud/ subdirectory).
+  // With no DATABASE_URL it creates a claimable Neon project on first boot and
+  // remembers it on the volume, so redeploys keep the same project. Served by
+  // the site at /cloud/ over private networking; no public domain needed.
+  const craftCloud = service("craft-cloud", {
+    source: github("derekcheungsa/craft-suite-railway", { branch: "main", checkSuites: false }),
+    rootDirectory: "cloud",
+    build: { watchPatterns: ["/cloud/**"] },
+    healthcheckPath: "/healthz",
+    replicas: { "us-east4-eqdc4a": 1 },
+    volumeMounts: { "/data": volume("craft-cloud-data") },
+  });
+
   return project("craft-suite", {
     variables: { managed: false },
-    resources: [craftSuite, craftRelay],
+    resources: [craftSuite, craftRelay, craftCloud],
   });
 });

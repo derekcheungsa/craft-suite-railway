@@ -12,7 +12,7 @@ const PORT = parseInt(process.env.PORT ?? "8080", 10);
 // site, so always current) compares it with the version it expects and tells the
 // user when their relay needs updating (bridge/loader.js, RELAY_LATEST / RELAY_REQUIRED).
 // Bump it whenever this server changes; relays before it existed send none (= 1).
-const RELAY_VERSION = 2;
+const RELAY_VERSION = 3;
 
 const MCP_TOKEN = process.env.MCP_TOKEN ?? "";
 const BRIDGE_TOKEN = process.env.BRIDGE_TOKEN ?? "";

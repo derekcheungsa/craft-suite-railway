@@ -120,6 +120,9 @@ FROM nginx:1.27-alpine
 ENV PORT=8080
 ARG RELAY_UPSTREAM="craft-relay.railway.internal:8080"
 ENV RELAY_UPSTREAM=${RELAY_UPSTREAM}
+# Craft Cloud (cloud/ service) on the same private network, served at /cloud/.
+ARG CLOUD_UPSTREAM="craft-cloud.railway.internal:8080"
+ENV CLOUD_UPSTREAM=${CLOUD_UPSTREAM}
 ARG RESOLVER="[fd12::10]"
 ENV RESOLVER=${RESOLVER}
 
