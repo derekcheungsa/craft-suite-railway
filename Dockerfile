@@ -34,27 +34,27 @@ ARG WORDCRAFT_VERSION=0.18.1
 # builder with 504 for storytold's release assets. Keep each in step with its *_VERSION.
 # GitHub's downloads are flaky at times, so each file is retried for ~10 minutes,
 # switching between a mirror and the original upstream copy.
-ARG LIGHTCRAFT_URL="https://github.com/tedmelnick/craft-suite-railway/releases/download/lightcraft-web-0.21.1-v0.21.1/lightcraft-web-0.21.1.zip"
-ARG VECTORCRAFT_URL="https://github.com/tedmelnick/craft-suite-railway/releases/download/vectorcraft-web-0.24.1-v0.24.1/vectorcraft-web-0.24.1.zip"
-ARG FILMCRAFT_URL="https://github.com/tedmelnick/craft-suite-railway/releases/download/filmcraft-web-0.20.1-v0.20.1/filmcraft-web-0.20.1.zip"
-ARG CRAFT_ANYTHING_URL="https://github.com/tedmelnick/craft-suite-railway/releases/download/craft-anything-web-0.3.0-v0.3.0/craft-anything-web-0.3.0.zip"
-ARG GRIDCRAFT_URL="https://github.com/tedmelnick/craft-suite-railway/releases/download/gridcraft-web-0.19.1-v0.19.1/gridcraft-web-0.19.1.zip"
-ARG WORDCRAFT_URL="https://github.com/tedmelnick/craft-suite-railway/releases/download/wordcraft-web-0.18.1-v0.18.1/wordcraft-web-0.18.1.zip"
-ARG FIGCRAFT_URL="https://github.com/tedmelnick/craft-suite-railway/releases/download/figcraft-web-0.18.1-v0.18.1/figcraft-web-0.18.1.zip"
-ARG DECKCRAFT_URL="https://github.com/tedmelnick/craft-suite-railway/releases/download/deckcraft-web-0.18.1-v0.18.1/deckcraft-web-0.18.1.zip"
-ARG CADCRAFT_URL="https://github.com/tedmelnick/craft-suite-railway/releases/download/cadcraft-web-0.20.1-v0.20.1/cadcraft-web-0.20.1.zip"
-ARG EFFECTCRAFT_URL="https://github.com/tedmelnick/craft-suite-railway/releases/download/effectcraft-web-0.22.0-v0.22.0/effectcraft-web-0.22.0.zip"
-ARG PHOTOCRAFT_URL="https://github.com/tedmelnick/craft-suite-railway/releases/download/photocraft-web-0.5.0-main4-nobrand-0c72d95/photocraft-web-0.5.0-main4-nobrand.zip"
-ARG PDFCRAFT_URL="https://github.com/tedmelnick/craft-suite-railway/releases/download/pdfcraft-web-0.21.1-v0.21.1/pdfcraft-web-0.21.1.zip"
+ARG LIGHTCRAFT_URL="https://github.com/derekcheungsa/craft-suite-railway/releases/download/lightcraft-web-0.21.1-v0.21.1/lightcraft-web-0.21.1.zip"
+ARG VECTORCRAFT_URL="https://github.com/derekcheungsa/craft-suite-railway/releases/download/vectorcraft-web-0.24.1-v0.24.1/vectorcraft-web-0.24.1.zip"
+ARG FILMCRAFT_URL="https://github.com/derekcheungsa/craft-suite-railway/releases/download/filmcraft-web-0.20.1-v0.20.1/filmcraft-web-0.20.1.zip"
+ARG CRAFT_ANYTHING_URL="https://github.com/derekcheungsa/craft-suite-railway/releases/download/craft-anything-web-0.3.0-v0.3.0/craft-anything-web-0.3.0.zip"
+ARG GRIDCRAFT_URL="https://github.com/derekcheungsa/craft-suite-railway/releases/download/gridcraft-web-0.19.1-v0.19.1/gridcraft-web-0.19.1.zip"
+ARG WORDCRAFT_URL="https://github.com/derekcheungsa/craft-suite-railway/releases/download/wordcraft-web-0.18.1-v0.18.1/wordcraft-web-0.18.1.zip"
+ARG FIGCRAFT_URL="https://github.com/derekcheungsa/craft-suite-railway/releases/download/figcraft-web-0.18.1-v0.18.1/figcraft-web-0.18.1.zip"
+ARG DECKCRAFT_URL="https://github.com/derekcheungsa/craft-suite-railway/releases/download/deckcraft-web-0.18.1-v0.18.1/deckcraft-web-0.18.1.zip"
+ARG CADCRAFT_URL="https://github.com/derekcheungsa/craft-suite-railway/releases/download/cadcraft-web-0.20.1-v0.20.1/cadcraft-web-0.20.1.zip"
+ARG EFFECTCRAFT_URL="https://github.com/derekcheungsa/craft-suite-railway/releases/download/effectcraft-web-0.22.0-v0.22.0/effectcraft-web-0.22.0.zip"
+ARG PHOTOCRAFT_URL="https://github.com/derekcheungsa/craft-suite-railway/releases/download/photocraft-web-0.5.0-main4-nobrand-0c72d95/photocraft-web-0.5.0-main4-nobrand.zip"
+ARG PDFCRAFT_URL="https://github.com/derekcheungsa/craft-suite-railway/releases/download/pdfcraft-web-0.21.1-v0.21.1/pdfcraft-web-0.21.1.zip"
 # GridCraft, WordCraft, FigCraft, DeckCraft and CADCraft releases ship the in-page agent
 # API (window.<app> from craft-web-api) themselves, so they are mirrored above.
 # DesignCraft, SoundCraft, MaterialCraft and TextureCraft releases don't yet: these are
 # upstream main plus .github/craft-web-patches (the agent API, then debrand.py, which removes
 # the ArtCraft name from the interface), built by .github/workflows/build-craft-web.yml.
-ARG DESIGNCRAFT_URL="https://github.com/tedmelnick/craft-suite-railway/releases/download/designcraft-web-0.17.0-main-agent-fonts-nobrand-49f6b85/designcraft-web-0.17.0-main-agent-fonts-nobrand.zip"
-ARG SOUNDCRAFT_URL="https://github.com/tedmelnick/craft-suite-railway/releases/download/soundcraft-web-0.17.0-main-agent-fonts-nobrand-ddeb7e7/soundcraft-web-0.17.0-main-agent-fonts-nobrand.zip"
-ARG MATERIALCRAFT_URL="https://github.com/tedmelnick/craft-suite-railway/releases/download/materialcraft-web-0.1.3-main-agent-fonts-nobrand-767dd65/materialcraft-web-0.1.3-main-agent-fonts-nobrand.zip"
-ARG TEXTURECRAFT_URL="https://github.com/tedmelnick/craft-suite-railway/releases/download/texturecraft-web-0.3.1-main-agent-fonts-nobrand-4be75a2/texturecraft-web-0.3.1-main-agent-fonts-nobrand.zip"
+ARG DESIGNCRAFT_URL="https://github.com/derekcheungsa/craft-suite-railway/releases/download/designcraft-web-0.17.0-main-agent-fonts-nobrand-49f6b85/designcraft-web-0.17.0-main-agent-fonts-nobrand.zip"
+ARG SOUNDCRAFT_URL="https://github.com/derekcheungsa/craft-suite-railway/releases/download/soundcraft-web-0.17.0-main-agent-fonts-nobrand-ddeb7e7/soundcraft-web-0.17.0-main-agent-fonts-nobrand.zip"
+ARG MATERIALCRAFT_URL="https://github.com/derekcheungsa/craft-suite-railway/releases/download/materialcraft-web-0.1.3-main-agent-fonts-nobrand-767dd65/materialcraft-web-0.1.3-main-agent-fonts-nobrand.zip"
+ARG TEXTURECRAFT_URL="https://github.com/derekcheungsa/craft-suite-railway/releases/download/texturecraft-web-0.3.1-main-agent-fonts-nobrand-4be75a2/texturecraft-web-0.3.1-main-agent-fonts-nobrand.zip"
 
 RUN apk add --no-cache curl unzip gzip
 WORKDIR /site
