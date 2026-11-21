@@ -147,6 +147,11 @@
     } catch (e) { /* not a URL */ }
     return null;
   }
+  // https://cloud/<name>?v=2 reads that version instead of the newest.
+  function cloudVersion(url) {
+    var m = typeof url === "string" && /[?&]v=(\d+)/.exec(url);
+    return m ? Number(m[1]) : null;
+  }
   function cloudFetch(path, opts) {
     return fetch("/cloud" + path, opts || {}).then(function (r) {
       if (r.ok) return r;
@@ -485,7 +490,7 @@
         pushLog({ t: Date.now(), tool: "cloud ← " + baseName(args.path), ms: Math.round(performance.now() - t0) });
         reply(m.id, true, r);
       }, fail);
-      else if (tool === "put_file" && cloudIn != null) cloud.get(cloudIn).then(function (bytes) {
+      else if (tool === "put_file" && cloudIn != null) cloud.get(cloudIn, cloudVersion(args.url)).then(function (bytes) {
         var name = args.name || baseName(cloudIn);
         noteImport(name);
         return adapter.importFile({ name: name, base64: window.CraftRelayFileKit.toBase64(bytes), url: null });
@@ -749,28 +754,45 @@
     cloud.list().then(function (files) {
       listEl.textContent = "";
       if (!files.length) { listEl.appendChild(el("div", { class: "csub", text: "Nothing saved yet." })); return; }
+      // Open a file (or one version of it) in this app.
+      function openIn(name, version) {
+        cloudMsg("opening " + name + (version ? " v" + version : "") + "…");
+        cloud.get(name, version).then(function (bytes) {
+          noteImport(name);
+          return adapter.importFile({ name: name, base64: window.CraftRelayFileKit.toBase64(bytes), url: null });
+        }).then(function (r) {
+          if (r instanceof Error) throw r;
+          cloudMsg("opened " + name + (version ? " v" + version : ""));
+        }, function (e) { cloudMsg(e.message, true); });
+      }
+      var canOpen = !!(adapter && adapter.importFile);
       files.forEach(function (f) {
-        var openBtn = null;
-        if (adapter && adapter.importFile) {
-          openBtn = el("button", { class: "mini", text: "Open", title: "Open the newest version in this app", onclick: function () {
-            cloudMsg("opening " + f.name + "…");
-            cloud.get(f.name).then(function (bytes) {
-              noteImport(f.name);
-              return adapter.importFile({ name: f.name, base64: window.CraftRelayFileKit.toBase64(bytes), url: null });
-            }).then(function (r) {
-              if (r instanceof Error) throw r;
-              cloudMsg("opened " + f.name);
-            }, function (e) { cloudMsg(e.message, true); });
-          } });
-        }
+        var openBtn = canOpen ? el("button", { class: "mini", text: "Open", title: "Open the newest version in this app", onclick: function () { openIn(f.name); } }) : null;
         var dl = el("button", { class: "mini", text: "↓", title: "Download to this PC", onclick: function () {
           cloud.get(f.name).then(function (bytes) { saveBlob(f.name, bytes); }, function (e) { cloudMsg(e.message, true); });
         } });
+        // "N versions" opens the version history: every save, newest first, each with its own Open.
+        var hist = el("div", { class: "cvers" }); hist.style.display = "none";
+        var info = f.versions > 1
+          ? el("button", { class: "vlink", text: f.versions + " versions · " + mb(f.size), title: "Show every version", onclick: function () {
+              if (hist.style.display !== "none") { hist.style.display = "none"; return; }
+              hist.style.display = "block"; hist.textContent = "loading…";
+              cloudFetch("/files/" + encodeURIComponent(f.name) + "/versions").then(function (r) { return r.json(); }).then(function (j) {
+                hist.textContent = "";
+                (j.versions || []).forEach(function (v, i) {
+                  hist.appendChild(el("div", { class: "cver" }, [
+                    el("span", { text: "v" + v.version + (i === 0 ? " · latest" : "") + " · " + mb(v.size) + (v.app ? " · " + v.app : "") }),
+                    canOpen ? el("button", { class: "mini", text: "Open", title: "Open this version in this app", onclick: function () { openIn(f.name, v.version); } }) : null
+                  ]));
+                });
+              }, function (e) { hist.textContent = e.message; });
+            } })
+          : el("i", { text: mb(f.size) });
         listEl.appendChild(el("div", { class: "cfile" }, [
           el("span", { text: f.name, title: f.name + (f.app ? " — from " + f.app : "") }),
-          el("i", { text: (f.versions > 1 ? f.versions + " versions · " : "") + mb(f.size) }),
-          openBtn, dl
+          info, openBtn, dl
         ]));
+        listEl.appendChild(hist);
       });
     }, function (e) { listEl.textContent = e.message; });
 
@@ -840,6 +862,10 @@
       ".cfile { display:flex; align-items:center; gap:6px; padding:3px 0; border-top:1px solid #23252e; }",
       ".cfile span { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }",
       ".cfile i { font-style:normal; color:#6a6d78; white-space:nowrap; }",
+      ".cfile .vlink { background:none; border:0; padding:0; color:#b7aefb; font:inherit; cursor:pointer; white-space:nowrap; text-decoration:underline dotted; }",
+      ".cvers { margin:2px 0 6px 10px; padding-left:8px; border-left:2px solid #3a3d48; }",
+      ".cver { display:flex; align-items:center; gap:6px; padding:2px 0; color:#c9ccd6; }",
+      ".cver span { flex:1; }",
       ".ckeep { margin-top:6px; padding:6px 8px; border-radius:6px; background:rgba(109,93,246,.1); border:1px solid rgba(109,93,246,.35); color:#c9ccd6; }",
       ".ckeep button { margin-top:4px; }",
       ".ckeep.urgent { background:rgba(224,178,94,.12); border-color:rgba(224,178,94,.5); }",
