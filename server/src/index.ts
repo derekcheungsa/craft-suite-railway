@@ -8,6 +8,12 @@ import { buildServer } from "./tools.js";
 
 // ---------- configuration ----------
 const PORT = parseInt(process.env.PORT ?? "8080", 10);
+// The relay's version, sent to each tab in its welcome. The bridge (served by the
+// site, so always current) compares it with the version it expects and tells the
+// user when their relay needs updating (bridge/loader.js, RELAY_LATEST / RELAY_REQUIRED).
+// Bump it whenever this server changes; relays before it existed send none (= 1).
+const RELAY_VERSION = 2;
+
 const MCP_TOKEN = process.env.MCP_TOKEN ?? "";
 const BRIDGE_TOKEN = process.env.BRIDGE_TOKEN ?? "";
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS ?? "*")
@@ -140,7 +146,7 @@ httpServer.on("upgrade", (req, socket, head) => {
         return;
       }
       log("tab_connected", { session: sessionId, app: msg.app, version: msg.version, tab: msg.tabId });
-      ws.send(JSON.stringify({ type: "welcome", sessionId }));
+      ws.send(JSON.stringify({ type: "welcome", sessionId, relayVersion: RELAY_VERSION }));
 
       ws.on("message", (raw) => {
         let m: any;

@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How to use Craft Suite</title>
+<style>
+  :root {
+    --bg: #14151a; --panel: #1d1f27; --line: #2a2d38;
+    --text: #e8e9ee; --muted: #9a9daa; --accent: #6d5df6; --soft: #b7aefb; --warn: #e9d76a;
+  }
+  * { box-sizing: border-box; }
+  @font-face {
+    font-family: "Archivo"; src: url("../fonts/Archivo-Variable.ttf") format("truetype");
+    font-weight: 100 900; font-stretch: 62% 125%; font-display: swap;
+  }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15.5px/1.65 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .wrap { max-width: 780px; margin: 0 auto; padding: 40px 20px 60px; }
+  a { color: var(--soft); }
+  .back { font-size: 13.5px; text-decoration: none; color: var(--muted); }
+  .back:hover { color: var(--soft); }
+  h1 {
+    font-family: "Archivo", system-ui, sans-serif; font-weight: 620; font-stretch: 118%;
+    font-size: 30px; letter-spacing: -.03em; margin: 14px 0 4px;
+  }
+  h1 span { color: var(--soft); }
+  .lede { color: var(--muted); margin: 0 0 22px; }
+  nav.toc { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 30px; }
+  nav.toc a {
+    font-size: 13px; text-decoration: none; padding: 5px 12px; border-radius: 999px;
+    border: 1px solid rgba(109,93,246,.35); background: rgba(109,93,246,.08); color: var(--soft);
+  }
+  nav.toc a:hover { background: rgba(109,93,246,.16); }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 22px 24px; margin: 0 0 18px; }
+  h2 { font-size: 18.5px; margin: 0 0 10px; display: flex; align-items: center; gap: 10px; letter-spacing: -.2px; }
+  h2 .n {
+    flex: none; width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--accent); color: var(--accent);
+    font-size: 12.5px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center;
+  }
+  h3 { font-size: 15px; margin: 18px 0 6px; }
+  p { margin: 0 0 10px; }
+  ul, ol { margin: 0 0 10px; padding-left: 22px; }
+  li { margin: 0 0 6px; }
+  li::marker { color: var(--muted); }
+  .muted { color: var(--muted); }
+  code, .k {
+    font-family: ui-monospace, monospace; font-size: 12.8px; color: var(--text);
+    background: #14151a; border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; white-space: nowrap;
+  }
+  .note {
+    border-left: 3px solid var(--warn); background: rgba(218,198,4,.06); padding: 10px 14px; border-radius: 0 8px 8px 0;
+    margin: 12px 0; font-size: 14.5px;
+  }
+  .note b { color: var(--warn); }
+  .tip { border-left: 3px solid var(--accent); background: rgba(109,93,246,.07); padding: 10px 14px; border-radius: 0 8px 8px 0; margin: 12px 0; font-size: 14.5px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14.5px; margin: 6px 0 10px; }
+  th, td { text-align: left; vertical-align: top; padding: 9px 10px; border-top: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; font-size: 13px; border-top: 0; }
+  td:first-child { width: 38%; }
+  .fab {
+    display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%;
+    background: #14151a; border: 1px solid #3a3d48; font-size: 11px; vertical-align: -3px;
+  }
+  footer { color: var(--muted); font-size: 12.5px; text-align: center; margin-top: 26px; }
+  @media (max-width: 560px) {
+    section { padding: 18px 16px; }
+    td:first-child { width: auto; }
+    table, tbody, tr, td, th { display: block; }
+    thead { display: none; }
+    td { border-top: 0; padding: 2px 0; }
+    tr { border-top: 1px solid var(--line); padding: 10px 0; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="../">&larr; Back to all apps</a>
+  <h1>How to use Craft <span>Suite</span></h1>
+  <p class="lede">Sixteen free creative apps that run right in your browser &mdash; no install, no account. Here&rsquo;s everything worth knowing in five minutes.</p>
+
+  <nav class="toc" aria-label="On this page">
+    <a href="#start">Getting started</a>
+    <a href="#files">Your files</a>
+    <a href="#tips">Tips</a>
+    <a href="#claude">Using Claude</a>
+    <a href="#trouble">Troubleshooting</a>
+  </nav>
+
+  <section id="start">
+    <h2><span class="n">1</span>Getting started</h2>
+    <ol>
+      <li><b>Use a computer with an up-to-date browser.</b> Chrome or Edge work best: they use your graphics card most fully (through a newer browser feature called WebGPU). Firefox, Safari and Chrome-based browsers such as Brave also work, but heavy apps like EffectCraft, FilmCraft and LightCraft may be slower. Phones and tablets aren&rsquo;t a good fit.</li>
+      <li><b>Click any app</b> on the main page. It opens in the same tab; open it in a new tab if you want to keep the list handy.</li>
+      <li><b>Give it a moment the first time.</b> Each app downloads once (tens of megabytes) and prepares itself for your computer. Most take a few seconds; EffectCraft can take a minute or two. After that, opening it again is much quicker.</li>
+    </ol>
+    <div class="tip">Each app on the main page says what it&rsquo;s similar to &mdash; &ldquo;like Photoshop&rdquo;, &ldquo;like Excel&rdquo; &mdash; so you can pick the right one quickly.</div>
+  </section>
+
+  <section id="files">
+    <h2><span class="n">2</span>Your files</h2>
+    <p><b>Your work never leaves your computer.</b> Nothing is uploaded; the site only delivers the apps. That&rsquo;s private &mdash; and it also means a few things are up to you:</p>
+    <ul>
+      <li><b>Work is kept in this browser, on this computer, for this site.</b> Another browser, another computer, or a private/incognito window won&rsquo;t see it.</li>
+      <li><b>Export or download anything you want to keep.</b> Use the app&rsquo;s Save, Save As or Export &mdash; the file lands in your Downloads folder like any other download.</li>
+      <li><b>Clearing your browser&rsquo;s site data</b> (or &ldquo;cookies and site data&rdquo;) for this site <b>deletes</b> work kept in the browser.</li>
+      <li><b>To open your own files</b>, use the app&rsquo;s Open command, or drag a file onto the app window.</li>
+    </ul>
+    <div class="note"><b>Rule of thumb:</b> if it matters, export it. Treat the browser as a workspace, not a filing cabinet.</div>
+  </section>
+
+  <section id="tips">
+    <h2><span class="n">3</span>Tips for a smooth experience</h2>
+    <ul>
+      <li><b>Run two or three apps at a time, not ten.</b> They share your graphics card; too many heavy apps at once (especially EffectCraft, FilmCraft and LightCraft) can make the browser struggle.</li>
+      <li><b>Keep the app&rsquo;s tab visible while it works.</b> Browsers pause hidden tabs to save power, so long exports or renders can stall in a background tab.</li>
+      <li><b>After the apps are updated</b>, press <span class="k">Ctrl</span>+<span class="k">Shift</span>+<span class="k">R</span> (Mac: <span class="k">Cmd</span>+<span class="k">Shift</span>+<span class="k">R</span>) in an app&rsquo;s tab if anything looks off &mdash; it makes sure you have the newest version.</li>
+      <li><b>Keep your graphics drivers up to date.</b> Older drivers are the most common cause of graphics errors.</li>
+    </ul>
+  </section>
+
+  <section id="claude">
+    <h2><span class="n">4</span>Optional: let Claude drive the apps</h2>
+    <p>Every app except Craft Anything can be controlled by <b>Claude</b>, Anthropic&rsquo;s AI assistant: you ask in plain words (&ldquo;make a budget table&rdquo;, &ldquo;fill in this PDF form&rdquo;) and it works in the app open in your browser. <span class="muted">This is entirely optional &mdash; the apps work fully on their own.</span></p>
+    <p>To use it you run your own small <b>relay</b> &mdash; a tiny server that passes messages between Claude and your browser tab. It&rsquo;s yours alone, so any costs (your Claude plan, and a small hosting plan such as Railway&rsquo;s) are on your own accounts. One-time setup takes about ten minutes:</p>
+    <h3>One-time setup</h3>
+    <ol>
+      <li><b>You&rsquo;ll need:</b> a Claude plan that lets you add custom connectors, a free <a href="https://github.com/signup" rel="noopener">GitHub</a> account and a <a href="https://railway.com" rel="noopener">Railway</a> account.</li>
+      <li><b>Copy the project:</b> open <a href="https://github.com/derekcheungsa/craft-suite-railway" rel="noopener">the Craft Suite project on GitHub</a> and click <b>Fork</b>.</li>
+      <li><b>Start your relay on Railway:</b> <b>New Project &rarr; Deploy from GitHub repo</b> &rarr; your fork. In the service&rsquo;s <b>Settings</b>, set <b>Root Directory</b> to <code>server</code>.</li>
+      <li><b>Make up two passwords</b> and add them in the service&rsquo;s <b>Variables</b>: <code>MCP_TOKEN</code> (32+ random characters) and <code>BRIDGE_TOKEN</code> (16+). Keep them private.</li>
+      <li><b>Give it an address:</b> <b>Settings &rarr; Networking &rarr; Generate Domain</b>. You&rsquo;ll get something like <code>https://your-relay.up.railway.app</code>.</li>
+      <li><b>Connect Claude:</b> in Claude, <b>Settings &rarr; Connectors &rarr; Add custom connector</b>. URL: your relay&rsquo;s address followed by <code>/mcp</code>. Header: <code>Authorization: Bearer &lt;your MCP_TOKEN&gt;</code>.</li>
+    </ol>
+    <h3>Each time you want Claude&rsquo;s help</h3>
+    <ol>
+      <li>Open an app and click the <span class="fab">&#10686;</span> button in the bottom-right corner.</li>
+      <li><b>Relay address:</b> replace <code>/relay</code> with <b>your</b> relay&rsquo;s address (<code>https://your-relay.up.railway.app</code>).</li>
+      <li>Paste your <code>BRIDGE_TOKEN</code> and press <b>Connect agent</b>. Your browser remembers both next time.</li>
+      <li>Ask Claude: <i>&ldquo;What tabs are connected?&rdquo;</i> &mdash; then tell it what you&rsquo;d like done.</li>
+    </ol>
+    <h3>Keeping up to date</h3>
+    <p><b>New apps and app updates need nothing from you.</b> They appear on this site for everyone, and Claude can drive them through the relay you already have &mdash; the relay only passes messages and doesn&rsquo;t care which apps exist.</p>
+    <p class="muted">The rare exception is a change to the relay itself. You don&rsquo;t need to watch for it: when your relay is out of date, the <span class="fab">&#10686;</span> button shows a small yellow dot and its panel says so. Then click <b>Sync fork &rarr; Update branch</b> on your GitHub copy; Railway rebuilds your relay in a few minutes, and you reconnect.</p>
+    <div class="tip">Nothing connects until you press Connect, Claude can only reach the tab you connected, and the panel has a read-only switch and a Disconnect button.</div>
+  </section>
+
+  <section id="trouble">
+    <h2><span class="n">5</span>Troubleshooting</h2>
+    <table>
+      <thead><tr><th>What you see</th><th>What to do</th></tr></thead>
+      <tbody>
+        <tr><td>A blank or frozen-looking app on first open</td><td>Wait a minute &mdash; it may still be preparing (EffectCraft especially). Then try <span class="k">Ctrl</span>+<span class="k">Shift</span>+<span class="k">R</span>.</td></tr>
+        <tr><td>&ldquo;The graphics device was lost&rdquo;</td><td>Close other heavy app tabs, then reload. If it keeps happening, update your graphics driver and make sure hardware acceleration is on in your browser&rsquo;s settings.</td></tr>
+        <tr><td>An app looks out of date or half-updated</td><td>Press <span class="k">Ctrl</span>+<span class="k">Shift</span>+<span class="k">R</span> in its tab.</td></tr>
+        <tr><td>My saved work is gone</td><td>Check you&rsquo;re in the same browser, on the same computer, not in a private window, and on this exact site address. Work kept in the browser is erased if the site&rsquo;s data is cleared &mdash; export important files.</td></tr>
+        <tr><td>A Cloudflare error page (e.g. &ldquo;1027&rdquo;)</td><td>The site hit its free daily limit. It resets every day at midnight UTC (evening in the US); try again after that.</td></tr>
+        <tr><td>Claude says no tabs are connected</td><td>Check the <span class="fab">&#10686;</span> panel shows &ldquo;agent connected&rdquo;, that the relay address is <b>yours</b> (not <code>/relay</code>), and keep the tab visible.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <footer>
+    Craft Suite was created by <a href="https://github.com/derekcheungsa/craft-suite-railway" rel="noopener">Derek Cheung</a> (<a href="https://www.youtube.com/@derekcheungsa" rel="noopener">YouTube</a>) and has been extended since with more apps, Claude support for most of them, this guide and free hosting.<br>
+    The apps are made by the ArtCraft team (<a href="https://github.com/storytold" rel="noopener">storytold</a> on GitHub), open source under MIT / Apache-2.0.
+    Craft Suite is an independent community project, not made, sponsored or endorsed by the ArtCraft team; some apps here (PhotoCraft, DesignCraft, SoundCraft, MaterialCraft and TextureCraft) are modified to add Claude control and show only a plain-text credit to the ArtCraft team. ArtCraft is a trademark of the ArtCraft Team.
+    <br><span style="font-size:11.5px;opacity:.8">Adobe, Photoshop, Lightroom, Illustrator, InDesign, Acrobat, Premiere, After Effects, Animate and Substance are trademarks of Adobe Inc.; Microsoft, Excel, Word and PowerPoint of Microsoft Corporation; Figma of Figma, Inc.; AutoCAD of Autodesk, Inc. They are named only to describe what each app is similar to.</span>
+    <br><a href="../">&larr; Back to all apps</a>
+  </footer>
+</div>
+</body>
+</html>

@@ -33,10 +33,11 @@ server {
     gzip_comp_level 6;
     gzip_types application/wasm text/javascript text/css application/json image/svg+xml application/manifest+json text/plain;
 
-    # --- lightcraft & effectcraft ship UNHASHED filenames (lightcraft_web.js,
-    # --- effectcraft_web_bg.wasm). Their upstream HOSTING.md requires
-    # --- revalidation on every fetch so version upgrades are picked up.
-    location ~ ^/(lightcraft|effectcraft)/ {
+    # --- lightcraft, effectcraft & filmcraft (upstream >= 0.17) ship UNHASHED
+    # --- filenames (lightcraft_web.js, filmcraft_web.js). Their upstream
+    # --- HOSTING.md requires revalidation on every fetch so version upgrades
+    # --- are picked up.
+    location ~ ^/(lightcraft|effectcraft|filmcraft)/ {
         add_header Cache-Control "no-cache" always;
         add_header Cross-Origin-Opener-Policy "same-origin" always;
         add_header Cross-Origin-Embedder-Policy "require-corp" always;
@@ -46,7 +47,7 @@ server {
     }
 
     # --- Hashed/immutable app assets: cache forever.
-    location ~ ^/(photocraft|pdfcraft|vectorcraft|filmcraft)/.*\.(wasm|js)$ {
+    location ~ ^/(photocraft|pdfcraft|vectorcraft|cadcraft|deckcraft|gridcraft|soundcraft|craft-anything|designcraft|figcraft|materialcraft|texturecraft|wordcraft)/.*\.(wasm|js)$ {
         add_header Cache-Control "public, max-age=31536000, immutable" always;
         add_header Cross-Origin-Opener-Policy "same-origin" always;
         add_header Cross-Origin-Embedder-Policy "require-corp" always;

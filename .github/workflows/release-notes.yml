@@ -1,0 +1,48 @@
+# One-off, run by hand: rewrites the notes of the app builds kept in this repo's
+# releases so each says plainly whether it is an unmodified official release or a
+# modified build, and who made it. New releases get the same wording from
+# build-craft-web.yml.
+name: Fix release notes
+on: workflow_dispatch
+permissions:
+  contents: write
+jobs:
+  notes:
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          R: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          ind="Craft Suite is an independent community project, not made, sponsored or endorsed by the ArtCraft team."
+          used=" $(curl -sfL "https://raw.githubusercontent.com/$R/$GITHUB_SHA/Dockerfile" | grep -oE 'releases/download/[^/]+/' | cut -d/ -f3 | tr '\n' ' ') "
+          gh api "repos/$R/releases?per_page=100" --paginate --jq '.[] | [.tag_name, .body] | @json' |
+          while read -r j; do
+            tag=$(jq -r '.[0]' <<<"$j"); body=$(jq -r '.[1]' <<<"$j"); app=${tag%%-web-*}
+            case "$tag" in
+              *-nobrand-*)
+                src=$(grep -oE 'storytold/[a-z-]+@[0-9a-f]+' <<<"$body" | head -1 || true)
+                notes="Modified web build of ${src:-storytold/$app}: built from upstream source with a small patch that adds the in-page Claude API, and with the ArtCraft name and marks removed from the interface (.github/craft-web-patches); the About window says \"Based on ${app} by the ArtCraft team\". Not an official ArtCraft release. $ind" ;;
+              photocraft-*-main*|pdfcraft-*-main*)
+                notes="Modified ${app} web build by Derek Cheung, adding an in-page Claude API; first published in https://github.com/derekcheungsa/craft-suite-railway (patch: docs/${app}-agent-api.patch). This is a copy of his release zip, kept here so the site doesn't depend on another repository. Not an official ArtCraft release. $ind" ;;
+              designcraft-*-main-*|soundcraft-*-main-*|materialcraft-*-main-*|texturecraft-*-main-*)
+                src=$(grep -oE 'storytold/[a-z-]+@[0-9a-f]+' <<<"$body" | head -1 || true)
+                notes="Modified web build of ${src:-storytold/$app}: built from upstream source with a small patch that adds the in-page Claude API (.github/craft-web-patches). Not an official ArtCraft release. $ind" ;;
+              *-main-*)
+                src=$(grep -oE 'storytold/[a-z-]+@[0-9a-f]+' <<<"$body" | head -1 || true)
+                notes="Web build of ${src:-storytold/$app} (unreleased upstream main, which already included the in-page Claude API), built from unmodified source by .github/workflows/build-craft-web.yml. Not an official ArtCraft release. $ind" ;;
+              *)
+                ver=${tag##*-web-}; ver=${ver##*-}
+                notes="Unmodified copy of the ArtCraft team's official storytold/${app} ${ver} web release, mirrored by .github/workflows/build-craft-web.yml. $ind" ;;
+            esac
+            case "$used" in
+              *" $tag "*) ;;
+              *) notes="Superseded: no longer used by the site; kept so older save points can still be rebuilt.
+
+          $notes" ;;
+            esac
+            notes=$(sed 's/^ *//' <<<"$notes")
+            gh release edit "$tag" -R "$R" --notes "$notes"
+            echo "updated $tag"
+          done

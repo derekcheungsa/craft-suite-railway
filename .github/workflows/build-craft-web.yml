@@ -1,0 +1,203 @@
+# Build Craft web apps from a pinned upstream commit and publish the zip as a
+# GitHub release in this repo, so the Dockerfile can fetch it (the *_URL args).
+#
+# Why: upstream main of GridCraft and WordCraft installs the in-page agent API
+# (window.gridcraft / window.wordcraft, via craft-web-api) but no release ships
+# it yet. When upstream does release it, drop the *_URL override instead.
+#
+# What gets built is listed in .github/craft-web-builds.json. Pushing a change
+# to that file (or this workflow) builds every entry whose release doesn't
+# exist yet; "Run workflow" on the Actions tab does the same by hand.
+# An entry with "patch": true gets the agent API added first by
+# .github/craft-web-patches/patch.py (apps whose upstream main lacks it), or, with
+# "patchfile", by applying that patch file from this repo (PhotoCraft: docs/photocraft-agent-api.patch).
+# Every "patch" entry is then run through .github/craft-web-patches/debrand.py, which removes the
+# ArtCraft name and mark from the interface (the brand licence doesn't allow modified builds to
+# carry them) and leaves the plain-text credit "Based on <App> by the ArtCraft team".
+# An entry with "mirror": true copies upstream's own release zip (ref = its tag) unchanged.
+name: Build Craft web apps
+
+on:
+  push:
+    paths:
+      - .github/craft-web-builds.json
+      - .github/workflows/build-craft-web.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.read.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: read
+        run: |
+          echo "matrix=$(jq -c '{include: .}' .github/craft-web-builds.json)" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.plan.outputs.matrix) }}
+    env:
+      APP: ${{ matrix.app }}
+      REF: ${{ matrix.ref }}
+      LABEL: ${{ matrix.label }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Release name
+        id: name
+        run: |
+          short="${REF:0:7}"
+          echo "tag=${APP}-web-${LABEL}-${short}" >> "$GITHUB_OUTPUT"
+          echo "asset=${APP}-web-${LABEL}.zip" >> "$GITHUB_OUTPUT"
+          if gh release view "${APP}-web-${LABEL}-${short}" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check out upstream ${{ matrix.app }} at ${{ matrix.ref }}
+        if: steps.name.outputs.exists != 'true' && !matrix.mirror
+        uses: actions/checkout@v4
+        with:
+          repository: storytold/${{ matrix.app }}
+          ref: ${{ matrix.ref }}
+          path: upstream
+          lfs: true
+
+      - name: Check out this repo (patches)
+        if: steps.name.outputs.exists != 'true' && !matrix.mirror && matrix.patch
+        uses: actions/checkout@v4
+        with:
+          path: self
+
+      - name: Add the agent API (window.${{ matrix.app }})
+        if: steps.name.outputs.exists != 'true' && !matrix.mirror && matrix.patch && !matrix.patchfile
+        run: python3 -I self/.github/craft-web-patches/patch.py "$APP" upstream
+
+      - name: Add the agent API from the patch file (window.${{ matrix.app }})
+        if: steps.name.outputs.exists != 'true' && !matrix.mirror && matrix.patch && matrix.patchfile
+        env:
+          PATCHFILE: ${{ matrix.patchfile }}
+        run: git -C upstream apply --whitespace=nowarn "$GITHUB_WORKSPACE/self/$PATCHFILE"
+
+      - name: Remove the ArtCraft name and mark from the interface
+        if: steps.name.outputs.exists != 'true' && !matrix.mirror && matrix.patch
+        run: python3 -I self/.github/craft-web-patches/debrand.py "$APP" upstream
+
+      - name: Fonts (storytold/craft-fonts)
+        if: steps.name.outputs.exists != 'true' && !matrix.mirror
+        # The apps embed their fonts from this checkout at build time (CRAFT_FONTS_DIR),
+        # as upstream's releases do; without it FigCraft has no fonts at all on the web.
+        uses: actions/checkout@v4
+        with:
+          repository: storytold/craft-fonts
+          ref: aced4137c022f1f587624d48e81ec77e1914a9cc
+          path: craft-fonts
+
+      - name: Rust + wasm target
+        if: steps.name.outputs.exists != 'true' && !matrix.mirror
+        run: |
+          rustup toolchain install stable --profile minimal --target wasm32-unknown-unknown
+          rustup default stable
+
+      - name: Trunk
+        if: steps.name.outputs.exists != 'true' && !matrix.mirror
+        run: |
+          curl -fsSL https://github.com/trunk-rs/trunk/releases/latest/download/trunk-x86_64-unknown-linux-gnu.tar.gz \
+            | tar -xz -C /usr/local/bin trunk
+          trunk --version
+
+      - uses: Swatinem/rust-cache@v2
+        if: steps.name.outputs.exists != 'true' && !matrix.mirror
+        with:
+          workspaces: upstream
+
+      - name: Build
+        if: steps.name.outputs.exists != 'true' && !matrix.mirror
+        working-directory: upstream/apps/${{ matrix.app }}-web
+        env:
+          CRAFT_FONTS_DIR: ${{ github.workspace }}/craft-fonts
+        run: trunk build --release --dist "$GITHUB_WORKSPACE/site" --public-url ./
+
+      - name: Check the build has the agent API
+        if: steps.name.outputs.exists != 'true' && !matrix.mirror
+        env:
+          PATCHFILE: ${{ matrix.patchfile }}
+        run: |
+          if [ -n "$PATCHFILE" ]; then
+            # PhotoCraft's own api.rs (not craft-web-api): its method names sit in the wasm.
+            grep -rqa 'importBytes' site || { echo "no window.$APP API in the build"; exit 1; }
+          else
+            # craft-web-api installs window.<app> from the wasm; its JS glue names the methods.
+            grep -rqE 'docInspect|uiInspect' site || { echo "no craft-web-api in the build"; exit 1; }
+          fi
+          grep -Eq '(src|href)="/[^/]' site/index.html && { echo "root-absolute URLs in index.html"; exit 1; } || true
+
+      - name: Check the build for the ArtCraft name
+        if: steps.name.outputs.exists != 'true' && !matrix.mirror && matrix.patch
+        run: |
+          # Text, JS glue and wasm alike. Only the credit line and link targets
+          # (discord.gg/artcraft, getartcraft.com) may remain. Translation catalogs are compressed
+          # inside the wasm, so debrand.py has already checked their source.
+          left=$(grep -rao -iE '[ -~]*artcraft[ -~]*' site \
+            | sed -E 's/getartcraft\.com//Ig; s#discord\.gg/artcraft##Ig; s/Based on [A-Za-z]+ by the ArtCraft team//g' \
+            | grep -i artcraft || true)
+          if [ -n "$left" ]; then
+            echo "the ArtCraft name is still in the build:"; echo "$left" | head -40; exit 1
+          fi
+          echo "no ArtCraft name in the built files (outside the credit line and link targets)"
+
+      - name: Zip
+        if: steps.name.outputs.exists != 'true' && !matrix.mirror
+        run: |
+          dir="${APP}-web-${LABEL}"
+          mkdir -p "pkg/$dir"
+          cp -R site/. "pkg/$dir/"
+          cp upstream/LICENSE-* upstream/NOTICE "pkg/$dir/" 2>/dev/null || true
+          (cd pkg && zip -qr9 "../${dir}.zip" "$dir")
+          ls -lh "${dir}.zip"
+
+      - name: Mirror the upstream release zip
+        # A "mirror" entry copies storytold/<app>'s own web release (tag = ref) here unchanged,
+        # so the Dockerfile doesn't depend on GitHub serving that asset at build time
+        # (it answered Railway's builder with 504 for EffectCraft's zips). An entry with a
+        # "url" copies that zip instead (builds first published in another repository).
+        if: steps.name.outputs.exists != 'true' && matrix.mirror
+        env:
+          SRC_URL: ${{ matrix.url }}
+        run: |
+          url="${SRC_URL:-https://github.com/storytold/${APP}/releases/download/${REF}/${APP}-web-${LABEL}.zip}"
+          for i in $(seq 1 60); do
+            if curl -fsSL --connect-timeout 30 --max-time 600 -o "${APP}-web-${LABEL}.zip" "$url"; then break; fi
+            echo "attempt $i failed; retrying in 30 s"; sleep 30
+          done
+          unzip -l "${APP}-web-${LABEL}.zip" | grep -q " ${APP}-web-${LABEL}/index.html$" || { echo "not the expected web build"; exit 1; }
+          sha256sum "${APP}-web-${LABEL}.zip"
+
+      - name: Publish release
+        if: steps.name.outputs.exists != 'true'
+        env:
+          SRC_URL: ${{ matrix.url }}
+          MIRROR: ${{ matrix.mirror }}
+          PATCHED: ${{ matrix.patch }}
+        run: |
+          ind="Craft Suite is an independent community project, not made, sponsored or endorsed by the ArtCraft team."
+          if [ -n "$SRC_URL" ]; then
+            notes="Copy of $SRC_URL, kept here so the site doesn't depend on another repository. That build is modified (it adds an in-page Claude API), so it is not an official ArtCraft release. $ind"
+          elif [ "$MIRROR" = "true" ]; then
+            notes="Unmodified copy of the ArtCraft team's official storytold/${APP} ${REF} web release, mirrored by .github/workflows/build-craft-web.yml. $ind"
+          elif [ "$PATCHED" != "true" ]; then
+            notes="Web build of storytold/${APP}@${REF} (unreleased upstream source, unmodified), by .github/workflows/build-craft-web.yml. Not an official ArtCraft release. $ind"
+          else
+            notes="Modified web build of storytold/${APP}@${REF}: built from upstream source with a small patch that adds the in-page Claude API, and with the ArtCraft name and marks removed from the interface (.github/craft-web-patches); the About window says \"Based on ${APP} by the ArtCraft team\". Built by .github/workflows/build-craft-web.yml. Not an official ArtCraft release. $ind"
+          fi
+          gh release create "${{ steps.name.outputs.tag }}" "${{ steps.name.outputs.asset }}" \
+            -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "${APP} web ${LABEL} (${REF:0:7})" \
+            --notes "$notes"

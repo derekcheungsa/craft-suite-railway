@@ -1,3 +1,6 @@
+> Original design document for Craft Suite by Derek Cheung (October 2026), kept as written.
+> This fork has since grown beyond it; see README.md.
+
 # PRD — "Craft Suite" Railway Template
 
 **Status:** Draft v1 for review
