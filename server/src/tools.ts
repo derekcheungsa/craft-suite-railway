@@ -153,7 +153,7 @@ export function buildServer(registry: TabRegistry, denylist: Denylist, log: (ev:
     "list_files",
     {
       title: "List files in an app tab",
-      description: "List the app's in-browser file table (exports, imported media, saved projects) with paths, sizes and kinds. Use before get_file / send_file.",
+      description: "List the app's in-browser file table (exports, imported media, saved projects) with paths, sizes and kinds, plus the shared shelf (kind \"shelf\", paths https://shelf/<name>) that every app tab in the suite can read. Use before get_file / send_file / put_file.",
       inputSchema: { session: z.string().optional() },
     },
     async ({ session }) => {
@@ -203,10 +203,10 @@ export function buildServer(registry: TabRegistry, denylist: Denylist, log: (ev:
     "send_file",
     {
       title: "Upload a file from the app to a URL",
-      description: "Upload a file from the app's in-browser file table to a URL you supply (presigned PUT, upload endpoint, local receiver). Best for large media: bytes never enter the conversation. Blocked by the page's read-only mode.",
+      description: "Upload a file from the app's in-browser file table to a URL you supply (presigned PUT, upload endpoint, local receiver). Best for large media: bytes never enter the conversation. To hand a file to ANOTHER Craft app tab, use url https://shelf/<name> (or just https://shelf/ to keep the file name): it goes on the suite's shared shelf in the browser, then put_file with that url in the other tab. Blocked by the page's read-only mode.",
       inputSchema: {
         path: z.string().describe("Path from list_files"),
-        url: z.string().describe("http(s) URL to upload to"),
+        url: z.string().describe("http(s) URL to upload to, or https://shelf/<name> to share with other app tabs"),
         method: z.enum(["PUT", "POST"]).optional().describe("HTTP method (default PUT)"),
         session: z.string().optional(),
       },
@@ -237,11 +237,11 @@ export function buildServer(registry: TabRegistry, denylist: Denylist, log: (ev:
     "put_file",
     {
       title: "Import a file into an app",
-      description: "Put a file into the app tab: from base64 (name required) or from a URL the page fetches (no size limit through the conversation). Imports as a dropped file — PhotoCraft opens it as a document, FilmCraft/EffectCraft add it to the file table. Blocked by the page's read-only mode.",
+      description: "Put a file into the app tab: from base64 (name required), from a URL the page fetches (no size limit through the conversation), or from the shared shelf with url https://shelf/<name> (files another app tab put there with send_file). Imports as a dropped file — PhotoCraft opens it as a document, FilmCraft/EffectCraft add it to the file table. Blocked by the page's read-only mode.",
       inputSchema: {
         name: z.string().optional().describe("File name (required with base64; derived from the URL otherwise)"),
         base64: z.string().optional().describe("File contents, base64 (max ~6 MB decoded)"),
-        url: z.string().optional().describe("http(s) URL the page fetches directly"),
+        url: z.string().optional().describe("http(s) URL the page fetches directly, or https://shelf/<name>"),
         session: z.string().optional(),
       },
     },

@@ -1,0 +1,73 @@
+# Publish the Craft Suite on Cloudflare's free plan: build the site exactly as the
+# Dockerfile does (cloudflare/build_site.py reads its app versions), upload what
+# changed to R2 (cloudflare/sync_r2.py), copy the files under 25 MiB into the
+# static assets folder (cloudflare/split_assets.py) and deploy the Worker with
+# those assets (cloudflare/worker.js serves the rest from R2). Runs on every push to main that touches the site, and
+# by hand from the Actions tab. See cloudflare/README.md.
+#
+# Needs two repository secrets: CLOUDFLARE_API_TOKEN (Workers Scripts: Edit,
+# Workers R2 Storage: Edit, Account Settings: Read) and CLOUDFLARE_ACCOUNT_ID.
+# Until both exist the job skips itself instead of failing.
+name: Publish to Cloudflare
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - Dockerfile
+      - portal/**
+      - bridge/**
+      - cloudflare/**
+      - .github/workflows/cloudflare.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudflare-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      WRANGLER: npx --yes wrangler@4.161.0
+    steps:
+      - name: Secrets present?
+        id: ready
+        run: |
+          if [ -n "$CLOUDFLARE_API_TOKEN" ] && [ -n "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID not set; skipping the Cloudflare publish."
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.ready.outputs.ok == 'true'
+
+      - name: R2 bucket (created once)
+        if: steps.ready.outputs.ok == 'true'
+        working-directory: cloudflare
+        run: |
+          $WRANGLER r2 bucket list | grep -q 'craft-suite-site' || $WRANGLER r2 bucket create craft-suite-site
+
+      - name: Build the site
+        if: steps.ready.outputs.ok == 'true'
+        run: python3 -I cloudflare/build_site.py "$RUNNER_TEMP/site"
+
+      - name: Upload what changed to R2
+        if: steps.ready.outputs.ok == 'true'
+        run: python3 -I cloudflare/sync_r2.py "$RUNNER_TEMP/site" craft-suite-site
+
+      - name: Static assets (every file under 25 MiB)
+        if: steps.ready.outputs.ok == 'true'
+        run: python3 -I cloudflare/split_assets.py "$RUNNER_TEMP/site" cloudflare/public
+
+      - name: Deploy the Worker and static assets
+        if: steps.ready.outputs.ok == 'true'
+        working-directory: cloudflare
+        run: $WRANGLER deploy

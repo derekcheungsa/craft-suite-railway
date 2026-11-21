@@ -15,7 +15,11 @@
     wav: "audio/wav", mp3: "audio/mpeg", m4a: "audio/mp4", aac: "audio/aac",
     ogg: "audio/ogg", flac: "audio/flac", mp4: "video/mp4", webm: "video/webm",
     mov: "video/quicktime", fcproj: "application/json", ecproj: "application/json",
-    pdf: "application/pdf", zip: "application/zip"
+    pdf: "application/pdf", zip: "application/zip",
+    xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    xlsm: "application/vnd.ms-excel.sheet.macroEnabled.12", ods: "application/vnd.oasis.opendocument.spreadsheet",
+    docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    odt: "application/vnd.oasis.opendocument.text", rtf: "application/rtf", tsv: "text/tab-separated-values"
   };
   function extOf(path) { var m = /\.([a-z0-9]+)$/i.exec(String(path || "")); return m ? m[1].toLowerCase() : ""; }
   function toBase64(bytes) {
@@ -87,7 +91,7 @@
    * of the confirmed commands. */
   adapters.lightcraft = {
     app: "lightcraft",
-    versions: ["0.4"],
+    versions: ["0.4", "0.18", "0.21"],
     detect: function () { return typeof window.lightcraft === "object" && typeof window.lightcraft.command === "function"; },
     readOnlyCommands: ["library.info", "develop.controls", "develop.get"],
     catalog: [
@@ -117,13 +121,14 @@
   };
 
   /* ---------------- EffectCraft ----------------
-   * In-page API (v0.6, verified): window.effectcraft mirrors the desktop
+   * In-page API (v0.6; v0.22 keeps the same functions): window.effectcraft mirrors the desktop
    * control channel: execute, commands, inspect, screenshot, renderFrame.
    * window.effectcraft exists BEFORE the engine finishes booting, so guard
    * every call and fail fast with a retry hint instead of hanging. */
   adapters.effectcraft = {
     app: "effectcraft",
-    versions: ["0.6"],
+    // 0.22 fixes the Chrome-on-Windows load hang in 0.6 (storytold/effectcraft#1590).
+    versions: ["0.6", "0.22"],
     detect: function () { return typeof window.effectcraft === "object" && typeof window.effectcraft.execute === "function"; },
     readOnlyCommands: [],
     notReady: function () {
@@ -180,13 +185,14 @@
   };
 
   /* ---------------- FilmCraft ----------------
-   * In-page API (main @ 7b6c134, post-v0.4.0; see docs/web.md): the desktop
-   * control channel as promises. The stock v0.4.0 release has no in-page API
-   * (detect() simply never fires there). Replies are polled on the UI frame
-   * loop, so a stalled/hidden tab means calls hang until the relay timeout. */
+   * In-page API (window.filmcraft; first on main after v0.4.0, included in the
+   * official releases since, e.g. v0.17.0): the desktop control channel as
+   * promises. Builds without it simply never match detect(). Replies are polled
+   * on the UI frame loop, so a stalled/hidden tab means calls hang until the
+   * relay timeout. */
   adapters.filmcraft = {
     app: "filmcraft",
-    versions: ["0.4"],
+    versions: ["0.4", "0.17", "0.20"],
     detect: function () { return typeof window.filmcraft === "object" && typeof window.filmcraft.execute === "function"; },
     readOnlyCommands: [],
     notReady: function () {
@@ -322,79 +328,373 @@
     }
   };
 
-  /* ---------------- PdfCraft ----------------
-   * In-page API (our fork of main, via PDFCRAFT_URL; stock builds have no
-   * in-page API — detect() simply never fires there): window.pdfcraft — the
-   * app's own M3.9 control channel (ui.state / ui.inspect / ui.click /
-   * ui.command / ui.screenshot, …) as promises, plus the agent file table:
-   * every save and export is kept in memory for list/read/upload. Requests
-   * are answered on the UI frame loop like the other craft apps. */
-  adapters.pdfcraft = {
-    app: "pdfcraft",
-    versions: ["0.5"],
-    detect: function () { return typeof window.pdfcraft === "object" && typeof window.pdfcraft.request === "function"; },
-    readOnlyCommands: ["ui.state", "ui.commands", "ui.inspect", "ui.screenshot", "form.fields"],
-    // The control-channel methods every build answers (0.5.0-main2+ adds form.*).
-    // Listed with list_commands so the interaction model is discoverable in-band.
-    agentMethods: [
-      { command: "form.fields", params: {}, doc: "Interactive fields of the active document: name, kind (Text/CheckBox/Radio/Combo/List/Signature), value, default, options, tooltip" },
-      { command: "form.set", params: { name: "full_name", value: "Ada Lovelace" }, doc: "Fill one field. Value by kind: string -> text (a radio's on-state for radios), true/false -> check box, array -> choices, number -> text, null -> clear a radio group" },
-      { command: "form.set_many", params: { values: { full_name: "Ada Lovelace", date_signed: "2026-10-10" } }, doc: "Fill several fields in one call: {field name: value, ...}" },
-      { command: "form.reset", params: {}, doc: "Clear fields back to their defaults — all of them, or {names: [\"full_name\"]}" },
-      { command: "form.import", params: { name: "data.xfdf", base64: "..." }, doc: "Import XFDF/FDF/XML/CSV form + comment data into the ACTIVE document (undoable). form.fields lists the field names an XFDF needs" },
-      { command: "ui.state", params: {}, doc: "App state: documents, active page, zoom, panels, dialog, notice, pages_on_screen (rects for aiming ui.click/ui.drag)" },
-      { command: "ui.inspect", params: { query: "Save" }, doc: "Widget tree (AccessKit): buttons, fields, text boxes with id, label, value, rect; query/role/limit filters. This is how to find what to click" },
-      { command: "ui.click", params: { label: "Save" }, doc: "Click a widget by AccessKit id or label, or a point {x, y} in window points (see ui.state pages_on_screen)" },
-      { command: "ui.type", params: { text: "hello" }, doc: "Type text into the focused widget (click a field first)" },
-      { command: "ui.key", params: { key: "Enter" }, doc: "Press a key (egui names: Enter, Escape, ArrowDown, A, F5...), optional modifiers: [\"Ctrl\"]" },
-      { command: "ui.drag", params: { from: [100, 100], to: [200, 200] }, doc: "Press, move, release — drawing comments, selecting text, moving things" },
-      { command: "ui.set", params: { key: "page", value: "2" }, doc: "View options: page, zoom, layout, theme, mode, default-mode..." },
-      { command: "ui.screenshot", params: {}, doc: "PNG of the window as png_base64 (needs the tab drawing — keep the window visible)" }
-    ],
+  /* ---------------- VectorCraft ----------------
+   * In-page API (upstream v0.21+, installed from the wasm as window.vectorcraft):
+   * execute(command, params) / commands() / inspect() / screenshot() mirror
+   * the desktop control channel (engine.execute, engine.commands, ui.inspect,
+   * ui.screenshot); files()/readFile(path) expose saves and exports;
+   * openFile(...) imports. Calls reject with "VectorCraft is not running yet"
+   * until the engine has booted. Older builds have no API (detect() never
+   * fires). Command reference: docs/mcp.md in storytold/vectorcraft. */
+  adapters.vectorcraft = {
+    app: "vectorcraft",
+    versions: ["0.21", "0.24"],
+    detect: function () { return typeof window.vectorcraft === "object" && typeof window.vectorcraft.execute === "function"; },
+    readOnlyCommands: ["document.formats", "document.info"],
     listCommands: function (filter) {
-      var self = this;
-      return window.pdfcraft.commands().then(function (wrapped) {
-        var cmds = wrapped && wrapped.commands instanceof Array ? wrapped.commands : [];
+      return Promise.resolve(window.vectorcraft.commands()).then(function (cmds) {
+        var list = cmds instanceof Array ? cmds : (cmds && cmds.commands instanceof Array ? cmds.commands : null);
+        if (!list) return { note: "catalog not an array; raw follows", raw: cmds, filter: filter };
         var f = (filter || "").toLowerCase();
-        var match = function (c) { return !f || JSON.stringify(c).toLowerCase().indexOf(f) !== -1; };
-        // Registry commands run as the menu would (no params). The agent
-        // methods (control channel + form filling) take JSON params — they are
-        // what an agent uses to read and set values.
-        var registry = cmds.filter(match).map(function (c) { c.source = "menu"; return c; });
-        var methods = self.agentMethods.filter(match).map(function (c) { c.source = "agent"; return c; });
-        return registry.concat(methods);
+        return f ? list.filter(function (c) { return JSON.stringify(c).toLowerCase().indexOf(f) !== -1; }) : list;
       });
     },
-    runCommand: function (command, params) {
-      // Registry commands run as the menu would (no params); the control-channel
-      // methods (ui.* and form.*) take a params object.
-      if (/^(ui|form)\./.test(command)) return window.pdfcraft.request(command, params || {});
-      return window.pdfcraft.execute(command);
-    },
-    inspect: function () { return window.pdfcraft.state(); },
+    runCommand: function (command, params) { return window.vectorcraft.execute(command, params || {}); },
+    inspect: function () { return window.vectorcraft.inspect(); },
     image: function () {
-      return window.pdfcraft.screenshot({}).then(normalizeImage, function (e) {
-        throw new Error("screenshot failed: " + (e && (e.message || e)));
+      // Prefer an engine-side render (document.export without a path returns
+      // dataBase64): no GPU capture, so it works even when the canvas isn't
+      // drawing. Fall back to a window screenshot.
+      return window.vectorcraft.execute("document.export", { format: "png", scale: 1 }).then(function (r) {
+        var b = r && (r.dataBase64 || r.data_base64 || r.data);
+        if (!b) throw new Error("document.export returned no data");
+        return { mime: "image/png", base64: b };
+      }).catch(function () {
+        return Promise.resolve(window.vectorcraft.screenshot({})).then(normalizeImage, function (e) {
+          throw new Error("screenshot failed: " + (e && (e.message || e)));
+        });
       });
     },
-    listFiles: function () { return window.pdfcraft.files(); },
+    listFiles: function () { return window.vectorcraft.files(); },
     file: function (path) {
-      return window.pdfcraft.readFile(path).then(function (bytes) {
+      return Promise.resolve(window.vectorcraft.readFile(path)).then(function (bytes) {
         if (bytes && bytes instanceof Error) throw bytes;
         if (!bytes) throw new Error(path + ": not found");
         return bytes;
       });
     },
     sendFile: function (path, url, method) {
-      return uploadBytes(function (p) { return window.pdfcraft.readFile(p); }, path, url, method);
+      return uploadBytes(function (p) { return Promise.resolve(window.vectorcraft.readFile(p)); }, path, url, method);
     },
     importFile: function (args) {
-      // importUrl fetches in the page (CORS-enabled URLs); openBytes delivers
-      // base64 through the same inbox as ?file= (opens as a document).
-      if (args.url) return window.pdfcraft.importUrl(args.url, args.name || undefined);
-      return window.pdfcraft.openBytes(args.name, window.CraftRelayFileKit.fromBase64(args.base64));
+      if (typeof window.vectorcraft.openFile !== "function") {
+        return Promise.reject(new Error("this VectorCraft build has no openFile"));
+      }
+      // openFile's exact signature isn't documented for the web build: try a
+      // File (drop-style), then (name, bytes).
+      var open = function (name, bytes) {
+        return Promise.resolve().then(function () {
+          return window.vectorcraft.openFile(new File([bytes], name));
+        }).catch(function (first) {
+          return Promise.resolve(window.vectorcraft.openFile(name, bytes)).catch(function () { throw first; });
+        });
+      };
+      if (args.url) {
+        var name = args.name || args.url.split(/[?#]/)[0].split("/").pop() || "download";
+        return fetch(args.url, { mode: "cors" }).then(function (resp) {
+          if (!resp.ok) throw new Error(args.url + ": HTTP " + resp.status);
+          return resp.arrayBuffer();
+        }).then(function (buf) {
+          return open(name, new Uint8Array(buf));
+        }, function (e) {
+          throw new Error("fetch failed (does the URL send Access-Control-Allow-Origin? " + (e && e.message ? e.message : e) + ")");
+        });
+      }
+      return open(args.name, window.CraftRelayFileKit.fromBase64(args.base64));
     }
   };
+
+  /* ---------------- craft-web-api apps ----------------
+   * GridCraft, WordCraft, FigCraft, DeckCraft, CADCraft, PdfCraft (official releases) and
+   * DesignCraft, SoundCraft, MaterialCraft, TextureCraft (upstream main plus
+   * .github/craft-web-patches): craft-web-api installs
+   * window.<app> = { request, execute, commands, docInspect, uiInspect,
+   * screenshot } over the app's control channel — the same one the desktop
+   * control server drives. Builds: .github/workflows/build-craft-web.yml.
+   * Reference: docs/control-protocol.md in each storytold/<app> repo.
+   *
+   * run_command: an engine command id goes through execute() (or, for apps
+   * whose engine runs commands as command.run {id, params}, through that); a
+   * control-protocol method (sheet.read, ui.render, session.inspect, …) goes
+   * through request(). If one route answers "unknown", the other is tried.
+   * Prefix a command with "control:" to force request().
+   *
+   * Files (apps with openExt): open and save are craft-web-host messages, not
+   * control methods. On those app pages we run as the page host
+   * (data-host="page" on the canvas, set here before the wasm starts): saves
+   * and exports arrive as <app>:save events and go into a file table (and
+   * still download, as they would without us), and put_file sends an
+   * <app>:open event. */
+  var UI_COMMON = ["ui.inspect", "ui.click", "ui.drag", "ui.move", "ui.key", "ui.text", "ui.screenshot", "ui.set", "ui.resize", "ui.focus"];
+  var CRAFT_HOSTED = {
+    gridcraft: {
+      versions: ["0.16.0-main", "0.19"],
+      control: ["window.list", "engine.journal", "document.inspect", "sheet.read", "cell.get",
+        "ui.inspect", "ui.object.select", "ui.click", "ui.drag", "ui.move", "ui.cell.click",
+        "ui.cell.drag", "ui.key", "ui.text", "ui.edit.begin", "ui.edit.text", "ui.edit.commit",
+        "ui.edit.cancel", "ui.ribbon", "ui.dialog", "ui.dialog.set", "ui.dialog.confirm",
+        "ui.dialog.cancel", "ui.screenshot", "ui.set", "ui.resize", "ui.focus"],
+      readOnly: ["window.list", "engine.journal", "document.inspect", "sheet.read", "cell.get", "ui.inspect", "ui.screenshot"],
+      openExt: /\.(xlsx|xlsm|xlsb|ods|csv|tsv)$/i
+    },
+    wordcraft: {
+      versions: ["0.15.1-main", "0.18"],
+      control: ["document.inspect", "ui.inspect", "ui.click", "ui.clickText", "ui.move", "ui.drag",
+        "ui.press", "ui.release", "ui.wheel", "ui.key", "ui.text", "ui.screenshot", "ui.render",
+        "ui.parity", "ui.resize", "ui.focus"],
+      readOnly: ["document.inspect", "ui.inspect", "ui.screenshot", "ui.render", "ui.parity"],
+      openExt: /\.(docx|dotx|doc|odt|rtf|txt|md|html?)$/i,
+      renderPage: true,
+      // WordCraft opens on File › Home; a document the agent creates or opens is left behind
+      // that screen. Close it so the window shows the document, as a click would.
+      afterOpen: function (api) { return api.execute("ui.backstage", { open: false }); },
+      openCommands: /^file\.(new|open|newFromTemplate)$/
+    },
+    pdfcraft: {
+      versions: ["0.21"],
+      // PdfCraft installs window.pdfcraft only with ?control in the page URL (opt-in).
+      // Its control channel is the desktop app's UI channel (ui.*); registry commands
+      // (file.save, form.import_data, page.rotate_cw, ...) go through execute() = ui.command.
+      // There are no field-level form commands: fill a form by clicking a field and typing.
+      urlFlag: "control",
+      canvasId: "pdfcraft",
+      control: ["ui.state", "ui.inspect", "ui.click", "ui.drag", "ui.move", "ui.key", "ui.type", "ui.screenshot",
+        "ui.set", "ui.resize", "ui.focus", "ui.panel", "ui.command", "ui.commands"],
+      readOnly: ["ui.state", "ui.inspect", "ui.commands", "ui.screenshot"],
+      openExt: /\.pdf$/i
+    },
+    figcraft: {
+      versions: ["0.15.0-main", "0.18"],
+      // FigCraft installs window.figcraft only with ?control in the page URL (opt-in).
+      urlFlag: "control",
+      control: UI_COMMON.concat(["document.inspect", "doc.list", "ui.input", "ui.pointer", "ui.menu.invoke", "ui.render", "command.batch"]),
+      readOnly: ["document.inspect", "doc.list", "ui.inspect", "ui.screenshot", "ui.render"],
+      openExt: /\.(fig|figcraft|svg|png|jpe?g)$/i
+    },
+    deckcraft: {
+      versions: ["0.15.0-main", "0.18"],
+      control: UI_COMMON.concat(["document.inspect", "app.open", "app.save", "app.export", "show.start", "show.end",
+        "slide.actions", "ui.dialog.open", "ui.dialog.close", "ui.ime", "ui.menu.invoke", "ui.pointer", "ui.render", "ui.tool.select"]),
+      readOnly: ["document.inspect", "ui.inspect", "ui.screenshot", "ui.render"],
+      openExt: /\.(pptx|potx|odp)$/i
+    },
+    cadcraft: {
+      versions: ["0.17.0-main", "0.20"],
+      inspectMethod: "drawing.inspect",
+      control: UI_COMMON.concat(["drawing.inspect", "app.open", "app.save", "cmdline.input", "cmdline.key", "cmdline.script",
+        "cmdline.state", "control.methods", "ui.elements", "ui.menu.invoke", "ui.menu.list", "ui.pointer", "ui.render"]),
+      readOnly: ["drawing.inspect", "cmdline.state", "control.methods", "ui.inspect", "ui.elements", "ui.menu.list", "ui.screenshot", "ui.render"],
+      openExt: /\.(dwg|dxf)$/i
+    },
+    designcraft: {
+      versions: ["0.17.0-main"],
+      // DesignCraft's ui.screenshot returns pixels only when it can write a file (no inline
+      // PNG on the web), so images come from ui.render, the current page rendered in the engine.
+      renderAlways: true,
+      control: UI_COMMON.concat(["document.inspect", "app.open", "app.save", "app.export", "ui.dialog.open", "ui.dialog.set",
+        "ui.dialog.confirm", "ui.dialog.cancel", "ui.docking", "ui.ime", "ui.menu.invoke", "ui.menu.list", "ui.paste",
+        "ui.pointer", "ui.render", "ui.tool.list", "ui.tool.select"]),
+      readOnly: ["document.inspect", "ui.inspect", "ui.menu.list", "ui.tool.list", "ui.screenshot", "ui.render"]
+    },
+    soundcraft: {
+      versions: ["0.17.0-main"],
+      inspectMethod: "session.inspect",
+      control: UI_COMMON.concat(["session.inspect", "document.inspect", "engine.parity", "ui.menu.invoke", "ui.menu.list", "ui.scroll", "ui.zoom"]),
+      readOnly: ["session.inspect", "document.inspect", "engine.parity", "ui.inspect", "ui.menu.list", "ui.screenshot"]
+    },
+    materialcraft: {
+      versions: ["0.1.3-main"],
+      inspectMethod: "session.inspect",
+      runVia: "command.run", listVia: "command.list",
+      control: ["ping", "session.inspect", "ui.inspect", "ui.menu.list", "ui.screenshot", "library.list",
+        "file.new", "file.open", "file.save", "file.exportMaterial", "file.sendToTextureCraft",
+        "package.activate", "package.close", "package.closeAll",
+        "graph.connect", "graph.disconnect", "graph.createFromSelection", "graph.exposed.add", "graph.exposed.set",
+        "graph.input.bind", "graph.input.unbind", "graph.instance.add", "graph.node.add", "graph.node.base",
+        "graph.node.edit", "graph.node.function", "graph.node.info", "graph.node.param", "graph.pattern.set",
+        "graph.preset.save", "graph.wire.delete", "graph.wire.insertDot", "graph.wire.swap"],
+      readOnly: ["ping", "session.inspect", "ui.inspect", "ui.menu.list", "ui.screenshot", "library.list", "graph.node.info"]
+    },
+    texturecraft: {
+      versions: ["0.3.1-main"],
+      inspectMethod: "session.inspect",
+      runVia: "command.run", listVia: "command.list",
+      control: ["ping", "session.inspect", "ui.inspect", "ui.menu.invoke", "ui.menu.list", "ui.resize", "ui.set", "ui.screenshot",
+        "viewport.screenshot", "command.batch", "bake", "bake.mesh.add", "render", "resource.import",
+        "material.load", "material.save", "material.link.cook", "material.link.preset", "material.link.saveSource",
+        "material.link.set", "mesh.import", "mesh.reimport", "mesh.export", "project.open", "project.save", "textures.export"],
+      readOnly: ["ping", "session.inspect", "ui.inspect", "ui.menu.list", "ui.screenshot", "viewport.screenshot"]
+    }
+  };
+
+  /* The page-host shim: only on an app page whose spec has openExt, and only once. */
+  var PAGE_APP = location.pathname.split("/").filter(Boolean)[0] || "";
+  var hostState = { files: [], dirty: false, lastError: null, ready: false };
+  function hostCanvas(app) {
+    var spec = CRAFT_HOSTED[app];
+    return document.getElementById(spec && spec.canvasId || app.replace(/-/g, "_") + "_canvas");
+  }
+  function startPageHost(app) {
+    var canvas = hostCanvas(app);
+    if (!canvas || canvas.getAttribute("data-host")) return;
+    canvas.setAttribute("data-host", "page");
+    function on(kind, fn) { canvas.addEventListener(app + ":" + kind, function (ev) { try { fn(ev.detail || {}); } catch (e) { dbgHost(e); } }); }
+    on("ready", function () { hostState.ready = true; });
+    on("save", function (d) {
+      var raw = d.bytes, bytes = ArrayBuffer.isView(raw) ? new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength) : new Uint8Array(raw || 0);
+      var name = String(d.name || "document");
+      hostState.files = hostState.files.filter(function (f) { return f.path !== name; });
+      hostState.files.unshift({ path: name, size: bytes ? bytes.length : 0, kind: d.saveAs ? "save-as" : "save", savedAt: new Date().toISOString(), bytes: bytes });
+      hostState.files = hostState.files.slice(0, 20);
+      // Still hand the file to the user, as the app does when it isn't hosted.
+      try {
+        var a = document.createElement("a");
+        a.href = URL.createObjectURL(new Blob([bytes], { type: MIME[extOf(name)] || "application/octet-stream" }));
+        a.download = name.split("/").pop();
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(function () { URL.revokeObjectURL(a.href); }, 60000);
+      } catch (e) { dbgHost(e); }
+      if (d.id) canvas.dispatchEvent(new CustomEvent(app + ":saved", { detail: { id: d.id } }));
+    });
+    on("dirty", function (d) { hostState.dirty = !!d.dirty; });
+    on("failed", function (d) { hostState.lastError = String(d.error || "failed"); });
+    on("handoff", function (d) {
+      hostState.lastError = (d.name || "a file") + " belongs to another app; it was downloaded instead";
+    });
+    // The hosted app leaves "unsaved changes?" to the host.
+    window.addEventListener("beforeunload", function (ev) { if (hostState.dirty) { ev.preventDefault(); ev.returnValue = ""; } });
+  }
+  function dbgHost(e) { try { console.log("[craft-relay] host:", e); } catch (x) { /* ignore */ } }
+  // An app that installs window.<app> only behind a URL flag gets it here, before its
+  // wasm (a module script, which runs after this one) reads the address.
+  if (CRAFT_HOSTED[PAGE_APP] && CRAFT_HOSTED[PAGE_APP].urlFlag) {
+    var flag = CRAFT_HOSTED[PAGE_APP].urlFlag;
+    var params = new URLSearchParams(location.search);
+    if (!params.has(flag)) {
+      params.append(flag, "");
+      try { history.replaceState(history.state, "", location.pathname + "?" + params.toString().replace(new RegExp("(^|&)" + flag + "=($|&)"), "$1" + flag + "$2") + location.hash); } catch (e) { dbgHost(e); }
+    }
+  }
+  if (CRAFT_HOSTED[PAGE_APP] && CRAFT_HOSTED[PAGE_APP].openExt) {
+    // This script runs at the end of <body>, so the canvas is already there and the
+    // app's wasm (a module script) hasn't started: set data-host now, not at
+    // DOMContentLoaded, which would race the app's own startup.
+    if (hostCanvas(PAGE_APP)) startPageHost(PAGE_APP);
+    else document.addEventListener("DOMContentLoaded", function () { startPageHost(PAGE_APP); });
+  }
+
+  var UNKNOWN = /unknown|not found|no such|unsupported|not a (command|method)|no handler|unrecognized/i;
+  function hostedAdapter(app) {
+    var spec = CRAFT_HOSTED[app];
+    function api() { return window[app]; }
+    function viaControl(command, params) { return Promise.resolve(api().request(command, params)); }
+    function viaEngine(command, params) {
+      if (spec.runVia === "command.run") return viaControl("command.run", { id: command, params: params });
+      return Promise.resolve(api().execute(command, params));
+    }
+    function call(command, params) {
+      params = params || {};
+      if (/^control:/.test(command)) return viaControl(command.slice(8), params);
+      var isControl = spec.control.indexOf(command) !== -1;
+      var first = isControl ? viaControl : viaEngine, second = isControl ? viaEngine : viaControl;
+      // request() and execute() resolve with the reply's result and reject with its error.
+      return first(command, params).catch(function (e) {
+        if (!UNKNOWN.test(String(e && e.message || e))) throw e;
+        return second(command, params).catch(function () { throw e; });
+      }).then(function (r) {
+        if (spec.afterOpen && spec.openCommands && spec.openCommands.test(command)) {
+          return Promise.resolve(spec.afterOpen(api())).then(function () { return r; }, function () { return r; });
+        }
+        return r;
+      });
+    }
+    var soft = function (p) { return Promise.resolve(p).catch(function (e) { return { error: String(e && e.message || e) }; }); };
+    return {
+      app: app,
+      versions: spec.versions,
+      detect: function () { return PAGE_APP === app && typeof api() === "object" && typeof api().request === "function"; },
+      readOnlyCommands: spec.readOnly,
+      listCommands: function (filter) {
+        var listing = spec.listVia ? viaControl(spec.listVia, filter ? { filter: filter } : {}) : Promise.resolve(api().commands());
+        return listing.then(function (cmds) {
+          var list = Array.isArray(cmds) ? cmds : (cmds && Array.isArray(cmds.commands) ? cmds.commands : []);
+          var f = (filter || "").toLowerCase();
+          var match = function (c) { return !f || JSON.stringify(c).toLowerCase().indexOf(f) !== -1; };
+          return {
+            commands: list.filter(match),
+            controlMethods: spec.control.filter(function (m) { return !f || m.indexOf(f) !== -1; }),
+            note: "commands run through " + (spec.runVia || "engine.execute") + "; controlMethods are control-protocol methods, also accepted by run_command"
+          };
+        });
+      },
+      runCommand: call,
+      inspect: function () {
+        // A method that isn't available yet (WordCraft with no document open) is reported
+        // beside the rest instead of failing the whole inspect.
+        var doc = spec.inspectMethod ? viaControl(spec.inspectMethod, {}) : api().docInspect({});
+        return Promise.all([soft(doc), soft(api().uiInspect({}))]).then(function (r) {
+          var ui = r[1] || {};
+          var out = {
+            document: r[0],
+            ui: { dialog: ui.dialog, tab: ui.tab || ui.ribbonTab, backstage: ui.backstage, windows: ui.windows || ui.documents, activeWindow: ui.activeWindow || ui.document }
+          };
+          if (spec.openExt) out.host = { hosted: !!hostCanvas(app) && hostCanvas(app).getAttribute("data-host") === "page", ready: hostState.ready, dirty: hostState.dirty, lastError: hostState.lastError, files: hostState.files.length };
+          return out;
+        });
+      },
+      image: function (mode) {
+        var shot = function () {
+          return Promise.resolve(api().screenshot({})).then(normalizeImage, function (e) {
+            throw new Error("screenshot failed (is the tab visible?): " + (e && (e.message || e)));
+          });
+        };
+        // mode "screenshot" (or "window"): what the window shows. Otherwise an app with an
+        // engine page render (WordCraft) renders the page, which works even when the tab
+        // isn't drawing.
+        if (spec.renderAlways) {
+          return call("ui.render", typeof mode === "number" ? { page: mode, scale: 1 } : { scale: 1 }).then(normalizeImage, function (e) {
+            throw new Error("page render failed (is a document open?): " + (e && (e.message || e)));
+          });
+        }
+        if (spec.renderPage && mode !== "screenshot" && mode !== "window") {
+          return call("ui.render", { page: typeof mode === "number" ? mode : 1, scale: 1 }).then(normalizeImage).catch(shot);
+        }
+        return shot();
+      },
+      listFiles: spec.openExt ? function () {
+        return hostState.files.map(function (f) { return { path: f.path, size: f.size, kind: f.kind, savedAt: f.savedAt }; });
+      } : undefined,
+      file: function (path) {
+        for (var i = 0; i < hostState.files.length; i++) if (hostState.files[i].path === path) return hostState.files[i].bytes;
+        throw new Error(path + ": not in the file table (save or export it in the app first; list_files shows what's there)");
+      },
+      sendFile: function (path, url, method) {
+        var self = this;
+        return uploadBytes(function (p) { return Promise.resolve().then(function () { return self.file(p); }); }, path, url, method);
+      },
+      importFile: spec.openExt ? function (args) {
+        var canvas = hostCanvas(app);
+        if (!canvas || canvas.getAttribute("data-host") !== "page") return Promise.reject(new Error("the page host isn't active on this tab; reload the page"));
+        var open = function (name, bytes) {
+          if (!spec.openExt.test(name)) throw new Error(name + ": not a file type " + app + " opens");
+          canvas.dispatchEvent(new CustomEvent(app + ":open", { detail: { name: name, bytes: bytes } }));
+          if (spec.afterOpen) setTimeout(function () { try { spec.afterOpen(api()); } catch (e) { /* ignore */ } }, 1500);
+          return { ok: true, opened: name, bytes: bytes.length, note: "sent to the app; inspect shows the result once it loads" };
+        };
+        if (args.url) {
+          var name = args.name || args.url.split(/[?#]/)[0].split("/").pop() || "download";
+          return fetch(args.url, { mode: "cors" }).then(function (resp) {
+            if (!resp.ok) throw new Error(args.url + ": HTTP " + resp.status);
+            return resp.arrayBuffer();
+          }).then(function (buf) { return open(name, new Uint8Array(buf)); }, function (e) {
+            throw new Error("fetch failed (does the URL send Access-Control-Allow-Origin? " + (e && e.message ? e.message : e) + ")");
+          });
+        }
+        return Promise.resolve().then(function () { return open(args.name, fromBase64(args.base64)); });
+      } : undefined
+    };
+  }
+  for (var hostedName in CRAFT_HOSTED) adapters[hostedName] = hostedAdapter(hostedName);
 
   window.CraftRelayDenied = denied;
 })();

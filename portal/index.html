@@ -10,38 +10,128 @@
     --text: #e8e9ee; --muted: #9a9daa; --accent: #6d5df6; --accent-soft: rgba(109,93,246,.15);
   }
   * { box-sizing: border-box; }
+  /* Archivo (SIL OFL 1.1, fonts/OFL-Archivo.txt): the display face the ArtCraft launcher and
+     getartcraft.com set app names in, at weight 620 and 118 % width. */
+  @font-face {
+    font-family: "Archivo"; src: url("fonts/Archivo-Variable.ttf") format("truetype");
+    font-weight: 100 900; font-stretch: 62% 125%; font-display: swap;
+  }
   body {
     margin: 0; background: var(--bg); color: var(--text);
     font: 15px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif;
     min-height: 100vh; display: flex; flex-direction: column; align-items: center;
   }
   header { text-align: center; padding: 56px 24px 8px; max-width: 720px; }
-  h1 { font-size: 30px; margin: 0 0 6px; letter-spacing: -.5px; }
-  h1 span { color: var(--accent); }
-  header p { color: var(--muted); margin: 0; }
-  main {
-    display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 18px; padding: 32px 24px; max-width: 1160px; justify-content: center; width: 100%;
+  h1 {
+    font-family: "Archivo", system-ui, sans-serif; font-weight: 620; font-stretch: 118%;
+    font-size: 32px; margin: 0 0 6px; letter-spacing: -.03em;
   }
-  a.card {
+  h1 span { color: #b7aefb; }
+  header p { color: var(--muted); margin: 0; }
+  /* A plain-text credit (the ArtCraft brand licence allows saying who makes the apps in plain
+     text; its name, wordmark and mark themselves are not used here). */
+  footer p.origin { color: var(--text); opacity: .9; }
+  footer p.tm { font-size: 11.5px; opacity: .75; }
+  header p.indep { margin: -6px 0 14px; font-size: 12.5px; color: var(--muted); opacity: .85; }
+  header p.credit {
+    font-family: "Archivo", system-ui, sans-serif; font-weight: 620; font-stretch: 118%;
+    font-size: 15px; letter-spacing: -.01em; color: #c9cad3; margin: 2px 0 14px;
+  }
+  main { padding: 16px 24px 32px; max-width: 1160px; width: 100%; }
+  .category { margin-top: 28px; }
+  .category h2 {
+    font-size: 14.5px; font-weight: 650; text-transform: uppercase; letter-spacing: 1.3px;
+    color: var(--muted); margin: 0 0 12px; padding-bottom: 9px; border-bottom: 1px solid #2a2d38;
+    display: flex; align-items: center; gap: 10px;
+  }
+  /* Category icons: original outline drawings in the heading's grey, in a fixed-width slot so
+     every heading's text starts at the same place (Video & Audio's icon is a little wider). */
+  .category h2 .cat-icon { flex: none; width: 25px; display: flex; align-items: center; }
+  .category h2 .cat-icon svg { height: 20px; width: auto; stroke-width: 1.9; }
+  .category .grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 18px;
+  }
+  .card {
     display: block; background: var(--panel); border: 1px solid #2a2d38; border-radius: 14px;
     padding: 20px 22px; text-decoration: none; color: var(--text);
     transition: background .15s, border-color .15s, transform .15s;
   }
   a.card:hover { background: var(--panel-hover); border-color: var(--accent); transform: translateY(-2px); }
-  .card .name { font-size: 17px; font-weight: 650; display: flex; align-items: center; gap: 11px; }
+  .card .name { display: flex; align-items: center; gap: 11px; }
+  /* An app's name as the launcher sets it: Archivo, "Craft" in the app's colour. */
+  .card .wordmark {
+    font-family: "Archivo", system-ui, sans-serif; font-weight: 620; font-stretch: 118%;
+    font-size: 18px; letter-spacing: -.03em; color: #f2f1ee; white-space: nowrap;
+  }
   .card .name .icon { width: 30px; height: 30px; border-radius: 7px; flex: none; }
   .card .ver {
-    margin-left: auto; font-size: 11px; color: var(--accent); background: var(--accent-soft);
-    border-radius: 20px; padding: 2px 10px; font-family: ui-monospace, monospace;
+    margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; line-height: 1.25;
+    font-size: 11px; color: #b7aefb; background: rgba(109,93,246,.07); border: 1px solid rgba(109,93,246,.18);
+    border-radius: 10px; padding: 3px 10px; font-family: ui-monospace, monospace; text-align: right;
   }
+  .card .ver:empty { display: none; }
+  .card .ver .tag { font-size: 9.5px; opacity: .8; white-space: nowrap; }
+  .card .ver { flex: none; }
+  /* Works-with-Claude marker: an original orange plug icon (not a brand mark). */
+  .agent {
+    flex: none; display: inline-flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px; border-radius: 6px; background: rgba(232,116,42,.16); color: #E8742A;
+  }
+  .guide-link { margin: 14px 0 0; }
+  .guide-link a {
+    display: inline-flex; align-items: center; gap: 6px; padding: 6px 16px; border-radius: 999px; text-decoration: none;
+    font-size: 13.5px; font-weight: 600; color: #b7aefb; background: rgba(109,93,246,.1); border: 1px solid rgba(109,93,246,.4);
+    transition: background .15s, border-color .15s, color .15s;
+  }
+  .guide-link a:hover { color: #d6d0ff; background: rgba(109,93,246,.18); border-color: rgba(109,93,246,.65); }
+  .legend { color: var(--muted); font-size: 13px; margin-top: 12px; display: inline-flex; align-items: center; gap: 7px; }
+  .card .like .note { text-transform: none; letter-spacing: 0; }
+  .card .no-agent { color: var(--muted); font-size: 12px; margin-top: 10px; display: flex; align-items: center; gap: 7px; }
   .card .like { color: var(--muted); font-size: 12.5px; text-transform: uppercase; letter-spacing: .8px; margin: 2px 0 8px; }
   .card .desc { color: var(--muted); font-size: 14px; }
+  /* A "coming soon" card: an app with no browser release yet. Not a link; dashed, quieter. */
+  .card.soon { border-style: dashed; cursor: default; }
+  .card.soon:hover { background: var(--panel); border-color: #2a2d38; transform: none; }
+  .card.soon .icon { opacity: .85; }
+  .card .ver.soon-tag { font-family: inherit; font-size: 11px; font-weight: 600; letter-spacing: .3px; color: #e9d76a;
+    background: rgba(218,198,4,.08); border-color: rgba(218,198,4,.3); }
+  .card .soon-note { color: var(--muted); font-size: 12px; margin-top: 10px; display: flex; align-items: center; gap: 7px; }
+  .card .soon-note a { color: #b7aefb; }
   footer {
     color: var(--muted); font-size: 12.5px; text-align: center; padding: 24px; max-width: 680px;
   }
   footer code { color: var(--text); background: var(--panel); border-radius: 4px; padding: 1px 5px; font-size: 11.5px; }
   footer a { color: var(--muted); }
+  /* The Versions toggle looks like a button: an outlined pill with an arrow that turns open. */
+  footer details.versions summary {
+    cursor: pointer; list-style: none; display: inline-flex; align-items: center; gap: 7px;
+    padding: 5px 14px; border-radius: 999px; font-size: 12.5px; font-weight: 600;
+    color: #b7aefb; background: rgba(109,93,246,.08); border: 1px solid rgba(109,93,246,.35);
+    transition: background .15s, border-color .15s, color .15s; user-select: none;
+  }
+  footer details.versions summary::-webkit-details-marker { display: none; }
+  footer details.versions summary::after {
+    content: ""; width: 6px; height: 6px; border-right: 1.6px solid currentColor; border-bottom: 1.6px solid currentColor;
+    transform: rotate(-45deg); transition: transform .15s; margin-left: 1px;
+  }
+  footer details.versions[open] summary::after { transform: rotate(45deg) translate(-1px, -1px); }
+  footer details.versions summary:hover { color: #d6d0ff; background: rgba(109,93,246,.16); border-color: rgba(109,93,246,.6); }
+  footer details.versions summary:focus-visible { outline: 2px solid #b7aefb; outline-offset: 2px; }
+  footer details.versions p { margin-top: 8px; }
+
+  /* --- "Using this site": four short facts for visitors, under the title --- */
+  .visit { width: 100%; max-width: 1160px; padding: 14px 24px 0; }
+  .visit ul {
+    list-style: none; margin: 0; padding: 0; display: grid; gap: 12px;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  }
+  .visit li {
+    display: flex; gap: 11px; align-items: flex-start; background: var(--panel); border: 1px solid #2a2d38;
+    border-radius: 12px; padding: 12px 14px; color: var(--muted); font-size: 13px; line-height: 1.5;
+  }
+  .visit li b { color: var(--text); font-weight: 600; display: block; font-size: 13.5px; margin-bottom: 1px; }
+  .visit li svg { flex: none; width: 18px; height: 18px; margin-top: 2px; color: #b7aefb; stroke-width: 1.9; }
+  .visit a { color: #b7aefb; }
 
   /* --- Connect Claude setup guide: one panel, connected steps --- */
   .setup { width: 100%; max-width: 1160px; padding: 10px 24px 8px; }
@@ -72,6 +162,7 @@
   .step ol, .step ul { margin: 2px 0 6px; padding-left: 16px; }
   .step li { margin-bottom: 3px; }
   .step b, .step strong { color: var(--text); font-weight: 600; }
+  .setup a { color: #b7aefb; }
   .tok {
     font-family: ui-monospace, monospace; font-size: 11.5px; color: var(--accent);
     background: var(--accent-soft); border-radius: 20px; padding: 1px 8px; white-space: nowrap;
@@ -91,6 +182,18 @@
     background: #14151a; border: 1px solid #3a3d48; color: #e8e9ee; font-size: 12px; vertical-align: middle; margin: 0 2px;
   }
   .setup .fine { color: var(--muted); font-size: 12px; padding: 18px 2px 0; border-top: 1px solid #2a2d38; margin-top: 20px; }
+  .setup-points { list-style: none; margin: 0 0 18px; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px 22px; }
+  .setup-points li { color: var(--muted); font-size: 13.2px; line-height: 1.55; padding-left: 14px; position: relative; }
+  .setup-points li::before { content: ""; position: absolute; left: 0; top: .62em; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+  .setup-points b { color: var(--text); font-weight: 600; }
+  .setup-cta { margin: 0 0 4px; }
+  .setup-cta a {
+    display: inline-flex; align-items: center; gap: 6px; padding: 8px 18px; border-radius: 999px; text-decoration: none;
+    font-size: 14px; font-weight: 600; color: #fff; background: var(--accent); border: 1px solid var(--accent);
+  }
+  .setup-cta a:hover { background: #7d6ff8; }
+  .setup .fine.owner { border-top: 1px solid #2a2d38; padding-top: 14px; margin-top: 16px; opacity: .85; }
+  .setup .fine.owner #mcp-url { white-space: normal; word-break: break-all; }
   .dot-inline { display: none; width: 22px; height: 22px; border-radius: 50%; background: var(--panel); border: 2px solid var(--accent);
     color: var(--accent); font-size: 11px; font-weight: 700; align-items: center; justify-content: center; flex: none; }
   @media (max-width: 980px) {
@@ -103,8 +206,20 @@
 <body>
 <header>
   <h1>Craft <span>Suite</span></h1>
-  <p>Six open-source, clean-room reimplementations of classic creative tools — pure Rust, compiled to WebAssembly, running entirely in your browser.</p>
+  <p class="credit">Apps by the ArtCraft Team</p>
+  <p class="indep">An independent community project &mdash; not made, sponsored or endorsed by the ArtCraft team.</p>
+  <p>Sixteen open-source, clean-room reimplementations of classic creative tools — pure Rust, compiled to WebAssembly, running entirely in your browser.</p>
+  <p class="legend"><span class="agent" data-agent-icon></span>Every app works with Claude, except Craft Anything</p>
+  <p class="guide-link"><a href="guide/">New here? Read the 5-minute guide <span aria-hidden="true">&rarr;</span></a></p>
 </header>
+<section class="visit" aria-label="Using this site">
+  <ul>
+    <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg><span><b>Free, nothing to install</b>Click any app to open it. No account or sign-up.</span></li>
+    <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg><span><b>Your files stay on your device</b>Work is saved in this browser only &mdash; never uploaded. Export anything you want to keep; clearing site data deletes it.</span></li>
+    <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span><b>Chrome or Edge work best</b>Firefox and Safari work too, but heavy apps may be slower. The first open of an app can take a minute or two while it gets ready (EffectCraft is the slowest); after that it&rsquo;s quicker.</span></li>
+    <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg><span><b>Want Claude to drive the apps?</b>Bring your own small relay &mdash; <a href="guide/#claude">see the guide</a>.</span></li>
+  </ul>
+</section>
 <main id="apps"></main>
 
 <section class="setup" id="setup">
@@ -112,55 +227,27 @@
     <div class="setup-head">
       <div class="logo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg></div>
       <div>
-        <h2>Drive these apps from Claude</h2>
-        <p>A relay ships with the suite &mdash; four steps, about three minutes, then Claude can read and edit your documents right here.</p>
+        <h2>Drive these apps from your own Claude</h2>
+        <p>Works with every app except Craft Anything. This site&rsquo;s own Claude connection is private, so you run a small relay of your own &mdash; a tiny server that links Claude to the app open in your browser.</p>
       </div>
     </div>
-    <div class="steps">
-      <div class="step">
-        <div class="rail"><div class="dot">1</div></div>
-        <h3><span class="dot-inline">1</span><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></svg>Get your two tokens</h3>
-        <p>Railway dashboard &rarr; <b>craft-relay</b> service &rarr; <b>Variables</b> tab:</p>
-        <ul>
-          <li><span class="tok">MCP_TOKEN</span> &mdash; Claude's key</li>
-          <li><span class="tok">BRIDGE_TOKEN</span> &mdash; your tab's key</li>
-        </ul>
-        <p>Generated fresh on deploy; reveal and copy.</p>
-      </div>
-      <div class="step">
-        <div class="rail"><div class="dot">2</div></div>
-        <h3><span class="dot-inline">2</span><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M7 9h5M7 13h8"/><path d="M17 18v3M12 18v3M7 18v3"/></svg>Add the connector</h3>
-        <p><b>Claude Desktop &rarr; Settings &rarr; Connectors &rarr; Add custom connector</b>:</p>
-        <div class="chip"><span class="val" id="mcp-url"></span><button type="button" data-copy="mcp-url">Copy</button></div>
-        <div class="chip"><span class="val">Authorization: Bearer &lt;MCP_TOKEN&gt;</span><button type="button" data-copy-self="1">Copy</button></div>
-        <p>Swap in your real <span class="tok">MCP_TOKEN</span>.</p>
-      </div>
-      <div class="step">
-        <div class="rail"><div class="dot">3</div></div>
-        <h3><span class="dot-inline">3</span><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><path d="M6 6l4.2 4.2M18 18l-4.2-4.2"/></svg>Connect a tab</h3>
-        <p>Open any app above, click the <span class="fabdemo">&#10686;</span> button in the bottom-right corner, paste the <span class="tok">BRIDGE_TOKEN</span> and press <b>Connect agent</b>.</p>
-        <p>The relay is already wired &mdash; nothing else to fill in. A persistent indicator shows while the bridge is live.</p>
-      </div>
-      <div class="step">
-        <div class="rail"><div class="dot">4</div></div>
-        <h3><span class="dot-inline">4</span><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5c-1.3 0-2.6-.3-3.7-.8L3 21l1.8-5.8A8.5 8.5 0 1 1 21 11.5z"/></svg>Try it</h3>
-        <p>Ask Claude:</p>
-        <ul>
-          <li>&ldquo;What tabs are connected?&rdquo;</li>
-          <li>&ldquo;Fill full_name and date_signed in the PDF&rdquo;</li>
-          <li>&ldquo;Show me the PhotoCraft canvas&rdquo;</li>
-        </ul>
-        <p>Keep the app window <b>visible</b> &mdash; hidden tabs pause their frame loop.</p>
-      </div>
-    </div>
-    <p class="fine">Nothing connects until you click Connect in the page, and the bridge only ever drives the tab it lives in &mdash; a read-only toggle and Disconnect sit in the <span class="fabdemo">&#10686;</span> panel. Works with 5 of the 6 apps today (all but VectorCraft).</p>
+    <ul class="setup-points">
+      <li><b>Optional.</b> Every app works fully on its own; Claude is an extra.</li>
+      <li><b>Ask in plain words</b> &mdash; &ldquo;make a budget table&rdquo;, &ldquo;fill in this PDF form&rdquo; &mdash; and Claude works in the app open in your browser.</li>
+      <li><b>Your own relay, your own costs.</b> About ten minutes to set up once, on your own Claude and Railway accounts.</li>
+      <li><b>You stay in control.</b> Nothing connects until you press Connect; Claude only reaches that tab, with a read-only switch and Disconnect in the <span class="fabdemo">&#10686;</span> panel.</li>
+    </ul>
+    <p class="setup-cta"><a href="guide/#claude">Read the setup guide <span aria-hidden="true">&rarr;</span></a></p>
+    <p class="fine owner">Running this site? Its own relay is already wired in: the connector URL is <span class="tok" id="mcp-url"></span>, the relay address in the <span class="fabdemo">&#10686;</span> panel can stay <span class="tok">/relay</span>, and the tokens are in the <b>craft-relay</b> service&rsquo;s Variables on Railway.</p>
   </div>
 </section>
 
 <footer>
-  <p id="versions"></p>
-  <p>Your work is saved <strong>in your browser</strong> (OPFS / IndexedDB), tied to this exact domain — no server-side storage, nothing leaves your device. Export anything you care about, and pick your final domain before you start. Chrome or Edge recommended (WebGPU).</p>
-  <p>Apps and app icons by the <a href="https://github.com/storytold" rel="noopener">storytold</a> org · MIT / Apache-2.0 · not affiliated with Adobe</p>
+  <details class="versions"><summary title="Show every app's version">Show versions</summary><p id="versions"></p></details>
+  <p>Your work is saved <strong>in your browser</strong> (OPFS / IndexedDB) on this device and this site only — no server-side storage, nothing is uploaded. Export anything you care about. Chrome or Edge recommended (WebGPU).</p>
+  <p class="origin">Craft Suite was created by <a href="https://github.com/derekcheungsa/craft-suite-railway" rel="noopener">Derek Cheung</a> (<a href="https://www.youtube.com/@derekcheungsa" rel="noopener">YouTube</a>) and has been extended since with more apps, Claude support for most of them, a guide and free hosting.</p>
+  <p>Apps and app icons by the ArtCraft team (<a href="https://github.com/storytold" rel="noopener">storytold</a> on GitHub) · MIT / Apache-2.0. Craft Suite is an independent community project, not made, sponsored or endorsed by the ArtCraft team; some apps here (PhotoCraft, DesignCraft, SoundCraft, MaterialCraft and TextureCraft) are modified to add Claude control and show only a plain-text credit to the ArtCraft team. ArtCraft is a trademark of the ArtCraft Team.</p>
+  <p class="tm">Adobe, Photoshop, Lightroom, Illustrator, InDesign, Acrobat, Premiere, After Effects, Animate and Substance are trademarks of Adobe Inc.; Microsoft, Excel, Word and PowerPoint of Microsoft Corporation; Figma of Figma, Inc.; AutoCAD of Autodesk, Inc. They are named only to describe what each app is similar to.</p>
 </footer>
 <script>
 const APPS = [
@@ -170,24 +257,125 @@ const APPS = [
   { slug: "vectorcraft", like: "Illustrator", desc: "Vector graphics editor: paths, typography, effects, SVG and PDF export." },
   { slug: "filmcraft",   like: "Premiere",    desc: "Non-linear video editor: timeline, color grading, effects, in-house codecs." },
   { slug: "effectcraft", like: "After Effects", desc: "Motion graphics and compositing: layers, keyframes, expressions, render queue." },
+  { slug: "designcraft", like: "InDesign",    desc: "Page layout: spreads, threaded text frames, styles, fine typography, IDML and PDF/X export." },
+  { slug: "figcraft",    like: "Figma",       desc: "Interface design: frames, auto layout, components, variants, prototypes." },
+  { slug: "wordcraft",   like: "Word",        desc: "Word processor: styles, tables, track changes, mail merge, .docx." },
+  { slug: "gridcraft",   like: "Excel",       desc: "Spreadsheets: 500+ functions, dynamic arrays, charts, pivot tables, conditional formatting, .xlsx." },
+  { slug: "deckcraft",   like: "PowerPoint",  desc: "Slide decks: themes, layouts, charts, transitions, .pptx, full-screen presenting." },
+  { slug: "soundcraft",  name: "SoundCraft", like: "a DAW", likeNote: "(Digital Audio Workstation)", desc: "Multitrack editing and mixing: plugins, automation, MIDI and notation, video sync, surround up to 9.1.6." },
+  { slug: "cadcraft",    name: "CADCraft", like: "AutoCAD", desc: "CAD drafting: command line, object snaps, layers, dimensions, hatches, DXF." },
+  { slug: "materialcraft", like: "Substance Designer", desc: "Node-graph PBR material builder with live 2D/3D preview and map export." },
+  { slug: "texturecraft",  like: "Substance Painter",  desc: "3D texture painting: PBR layers, masks, baked mesh maps, smart materials." },
+  // No browser release yet: shown as a "coming soon" card until upstream ships a web build.
+  { slug: "anicraft", name: "AniCraft", like: "Animate", soon: true, repo: "https://github.com/storytold/anicraft",
+    desc: "2D vector animation: timeline, layers, keyframes, classic and shape tweens, onion skinning." },
+  { slug: "craft-anything", name: "Craft Anything", like: "", desc: "Studies a target, has a coding agent build a new project, and refines it against the original." },
 ];
-const el = document.getElementById("apps");
-for (const a of APPS) {
-  const card = document.createElement("a");
-  card.className = "card";
-  card.href = a.slug + "/";
+// The page groups the apps into these categories, in this order; an app left
+// out of every category still shows, under "More", so none can go missing.
+const catIcon = (viewBox, paths) => '<svg viewBox="' + viewBox + '" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + paths + '</svg>';
+const CATEGORIES = [
+  { title: "Photo", apps: ["photocraft", "lightcraft"],
+    icon: catIcon("0 0 24 24", '<path d="M4 8h3l1.6-2.2h6.8L17 8h3v11H4z"/><circle cx="12" cy="13.2" r="3.4"/>') },
+  { title: "Graphics & Design", apps: ["vectorcraft", "figcraft", "designcraft"],
+    icon: catIcon("0 0 24 24", '<path d="M12 3l5.5 7.5L12 21 6.5 10.5z"/><path d="M12 21v-7.5"/><circle cx="12" cy="11.6" r="1.6"/>') },
+  { title: "Video & Audio", apps: ["filmcraft", "effectcraft", "soundcraft", "anicraft"],
+    icon: catIcon("0 0 30 24", '<path d="M2.5 5.5l9.5 6.5-9.5 6.5z"/><path d="M15.5 16v-4a6 6 0 0 1 12 0v4"/><path d="M15.5 12.8h3v5.7h-3zM24.5 12.8h3v5.7h-3z"/>') },
+  { title: "Documents & Office", apps: ["wordcraft", "gridcraft", "deckcraft", "pdfcraft"],
+    icon: catIcon("0 0 24 24", '<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/><path d="M9 12h6M9 15.5h6M9 9h3"/>') },
+  { title: "3D & CAD", apps: ["cadcraft", "materialcraft", "texturecraft"],
+    icon: catIcon("0 0 24 24", '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/>') },
+  { title: "Experimental", apps: ["craft-anything"],
+    icon: catIcon("0 0 24 24", '<path d="M9.5 3h5M10.5 3v6L5 19.5a1 1 0 0 0 .9 1.5h12.2a1 1 0 0 0 .9-1.5L13.5 9V3"/><path d="M7.4 15h9.2"/>') },
+];
+// Each app's colour for "Craft" in its name: the ArtCraft launcher's dark-theme ink
+// (craft-launcher crates/core/src/catalog.rs).
+const INK = {
+  photocraft: "#7FB0FF", lightcraft: "#FFC14D", vectorcraft: "#FF8A70", figcraft: "#4FE8B6",
+  designcraft: "#A6E04A", filmcraft: "#B69CFF", effectcraft: "#FF7AB8", soundcraft: "#5FD0EE",
+  wordcraft: "#8EA2FF", gridcraft: "#4FD68A", deckcraft: "#FFA060", pdfcraft: "#F23A62",
+  cadcraft: "#7CC8FF", materialcraft: "#63C5D3", texturecraft: "#E58A4E", "craft-anything": "#74AAFF",
+  anicraft: "#E9D44A", // not in the launcher yet: the yellow of AniCraft's own icon, lightened
+};
+// Craft Anything's raven icon is an ArtCraft brand asset (not open source), so it isn't
+// bundled here; its card shows the letter badge.
+const NO_ICON = new Set(["craft-anything"]);
+// Apps Claude can drive through the relay (bridge/adapters.js): all but Craft Anything.
+const NO_AGENT = new Set(["craft-anything"]);
+const AGENT_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3v5M15 3v5"/><path d="M6 8h12v3a6 6 0 0 1-12 0z"/><path d="M12 17v4"/></svg>';
+// The same plug, struck through: an app Claude can't drive.
+const AGENT_ICON_OFF = AGENT_ICON.replace('</svg>', '<path d="M4 4l16 16"/></svg>');
+document.querySelectorAll("[data-agent-icon]").forEach(s => { s.innerHTML = AGENT_ICON; });
+const placed = new Set(CATEGORIES.flatMap(c => c.apps));
+const leftover = APPS.filter(a => !placed.has(a.slug)).map(a => a.slug);
+if (leftover.length) CATEGORIES.push({ title: "More", apps: leftover });
+const bySlug = Object.fromEntries(APPS.map(a => [a.slug, a]));
+
+// Every app ships an icon (portal/icons/<slug>.png, from its repo's
+// assets/app-icon/hicolor/128x128). A missing one falls back to the badge.
+const main = document.getElementById("apps");
+for (const cat of CATEGORIES) {
+  const section = document.createElement("section");
+  section.className = "category";
+  const h2 = document.createElement("h2");
+  h2.innerHTML = '<span class="cat-icon">' + (cat.icon || "") + '</span>';
+  h2.appendChild(document.createTextNode(cat.title));
+  const el = document.createElement("div");
+  el.className = "grid";
+  section.append(h2, el);
+  main.appendChild(section);
+  for (const slug of cat.apps) {
+  const a = bySlug[slug];
+  if (!a) continue;
+  const card = document.createElement(a.soon ? "div" : "a");
+  card.className = a.soon ? "card soon" : "card";
+  if (!a.soon) card.href = a.slug + "/";
+  const name = a.name || (a.slug.charAt(0).toUpperCase() + a.slug.slice(1).replace(/craft$/, "Craft"));
+  // A letter badge stands in if the icon fails to load.
+  const badge = '<span class="icon" style="display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:8px;background:var(--accent,#7c5cff);color:#fff;font-weight:700">' + name.charAt(0) + '</span>';
+  const icon = NO_ICON.has(a.slug) ? badge : '<img class="icon" src="icons/' + a.slug + '.png" alt="" width="30" height="30" loading="lazy"' +
+    ' onerror="this.outerHTML=this.dataset.badge" data-badge="' + badge.replace(/"/g, '&quot;') + '">';
+  // "PhotoCraft" → "Photo" + "Craft" (in the app's colour); a name not ending in Craft stays whole.
+  const prefix = name.endsWith("Craft") ? name.slice(0, -5) : name;
+  const wordmark = '<span class="wordmark">' + prefix +
+    (prefix !== name ? '<span style="color:' + (INK[a.slug] || "var(--accent)") + '">Craft</span>' : '') + '</span>';
   card.innerHTML =
-    '<div class="name"><img class="icon" src="icons/' + a.slug + '.png" alt="" width="30" height="30" loading="lazy">' + a.slug.charAt(0).toUpperCase() + a.slug.slice(1) +
-    '<span class="ver" data-ver="' + a.slug + '"></span></div>' +
-    '<div class="like">like ' + a.like + '</div>' +
-    '<div class="desc">' + a.desc + '</div>';
+    '<div class="name">' + icon + wordmark +
+    (a.soon ? '<span class="ver soon-tag">Coming soon</span>' : '<span class="ver" data-ver="' + a.slug + '"></span>') +
+    '</div>' +
+    (a.like ? '<div class="like">like ' + a.like + (a.likeNote ? ' <span class="note">' + a.likeNote + '</span>' : '') + '</div>' : '') +
+    '<div class="desc">' + a.desc + '</div>' +
+    (a.soon ? '<div class="soon-note">Browser version on the way &middot; <a href="' + a.repo + '" rel="noopener">desktop app</a></div>' : '') +
+    (NO_AGENT.has(a.slug) ? '<div class="no-agent"><span class="agent off" aria-hidden="true">' + AGENT_ICON_OFF + '</span>Not available to Claude</div>' : '');
   el.appendChild(card);
+  }
 }
 fetch("versions.json").then(r => r.json()).then(v => {
-  document.querySelectorAll("[data-ver]").forEach(s => { s.textContent = v[s.dataset.ver] || ""; });
+  // "v0.17.0-main-agent-fonts" → "v0.17.0" over "main-agent-fonts".
+  document.querySelectorAll("[data-ver]").forEach(s => {
+    const full = v[s.dataset.ver] || "";
+    const m = full.match(/^(v?\d+(?:\.\d+)*)(?:-(.+))?$/);
+    s.textContent = "";
+    if (!full) return;
+    const num = document.createElement("span");
+    num.textContent = m ? m[1] : full;
+    s.appendChild(num);
+    if (m && m[2]) {
+      const tag = document.createElement("span");
+      tag.className = "tag";
+      tag.textContent = m[2];
+      s.appendChild(tag);
+    }
+  });
   document.getElementById("versions").textContent =
-    "Versions — " + Object.entries(v).map(([k, x]) => k + " " + x).join(" · ");
+    Object.entries(v).map(([k, x]) => k + " " + x).join(" · ");
 }).catch(() => {});
+
+// The Versions toggle says what a click will do.
+const versionsToggle = document.querySelector("footer details.versions");
+if (versionsToggle) versionsToggle.addEventListener("toggle", () => {
+  versionsToggle.querySelector("summary").textContent = versionsToggle.open ? "Hide versions" : "Show versions";
+});
 
 // Setup guide: the connector URL is this deployment's own /relay/mcp (the
 // same-origin proxy nginx ships with the suite), and copy buttons for chips.
