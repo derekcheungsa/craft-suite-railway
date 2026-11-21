@@ -1,0 +1,14 @@
+{
+  "name": "craft-cloud",
+  "version": "0.1.0",
+  "description": "Sign-in, file library and version history for Craft Suite, backed by Neon",
+  "type": "module",
+  "private": true,
+  "license": "MIT OR Apache-2.0",
+  "engines": { "node": ">=20" },
+  "scripts": { "start": "node src/server.js" },
+  "dependencies": {
+    "@neondatabase/serverless": "^1.2.1",
+    "jose": "^6.1.0"
+  }
+}

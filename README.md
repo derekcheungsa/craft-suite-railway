@@ -90,10 +90,11 @@ checks.
 
 ### Railway
 
-Two services: `craft-suite` (nginx, built from the root `Dockerfile`) and
-`craft-relay` (a small Node service in `server/`). nginx forwards `/relay/` to the relay
-over Railway's private network, so the in-page panel reaches it on the same address.
-The relay rebuilds only when files under `server/` change.
+Three services: `craft-suite` (nginx, built from the root `Dockerfile`), `craft-relay`
+(a small Node service in `server/`) and `craft-cloud` (Craft Cloud, in `cloud/`, with a
+volume at `/data`). nginx forwards `/relay/` and `/cloud/` to them over Railway's private
+network, so the in-page panel reaches both on the same address. Each rebuilds only when
+its own folder changes.
 
 Local test: `docker build -t craft-suite . && docker run -p 8090:8080 craft-suite`,
 then open http://localhost:8090.
@@ -104,6 +105,18 @@ The same site, served by a Cloudflare Worker from R2 storage, so visitors' downl
 cost nothing. Every push to `main` that touches the site republishes it
 (`.github/workflows/cloudflare.yml`). The Worker forwards `/relay/` to the Railway relay.
 Setup and free-plan limits are in [cloudflare/README.md](cloudflare/README.md).
+
+## Craft Cloud: save to the cloud with Neon
+
+Open the ⦿ panel in any app and sign in under **Craft Cloud** to save files to a shared
+library: open them in any app, on any device, with every save kept as a version. Claude
+can use it too: `send_file` / `put_file` with `https://cloud/<name>`, and `list_files`
+shows the library. Until someone signs in, nothing leaves the browser.
+
+It runs on [Neon](https://neon.com) (Postgres + Neon Auth) and needs no Neon account to
+start: on first boot the `craft-cloud` service creates a claimable Neon project, which
+lasts 72 hours and holds 100 MB until the owner (the first account) claims it from the
+panel. Details, limits and variables: [cloud/README.md](cloud/README.md).
 
 ## Claude: the Craft Relay
 

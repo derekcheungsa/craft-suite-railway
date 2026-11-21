@@ -129,6 +129,68 @@
   };
   window.CraftShelf = { list: shelf.list, clear: shelf.clear };
 
+  /* ---------- Craft Cloud: your library on Neon (optional service) ----------
+   * Served same-origin at /cloud/ by the craft-cloud service (cloud/). Sign in
+   * once on this site and every app tab shares the same library, on any
+   * device. Files are versioned: saving the same name again adds a version.
+   * Agents use it like the shelf, with https://cloud/<name>. Deployments
+   * without the service answer /cloud/status with an error and the section
+   * stays hidden. */
+  var CLOUD_HOST = "cloud";
+  function cloudName(url) {
+    if (typeof url !== "string") return null;
+    var m = /^cloud:\/*(.*)$/i.exec(url);
+    if (m) return decodeURIComponent(m[1]);
+    try {
+      var u = new URL(url);
+      if (u.hostname === CLOUD_HOST) return decodeURIComponent(u.pathname.slice(1));
+    } catch (e) { /* not a URL */ }
+    return null;
+  }
+  function cloudFetch(path, opts) {
+    return fetch("/cloud" + path, opts || {}).then(function (r) {
+      if (r.ok) return r;
+      return r.json().catch(function () { return {}; }).then(function (j) {
+        var e = new Error((j && j.error) || ("Craft Cloud answered HTTP " + r.status));
+        e.status = r.status;
+        throw e;
+      });
+    });
+  }
+  var cloud = {
+    info: null,
+    status: function () {
+      return cloudFetch("/status").then(function (r) { return r.json(); }).then(function (s) { cloud.info = s; return s; });
+    },
+    auth: function (kind, email, password) {
+      return cloudFetch("/auth/" + kind, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: email, password: password }) })
+        .then(function (r) { return r.json(); });
+    },
+    signOut: function () { return cloudFetch("/auth/sign-out", { method: "POST" }); },
+    list: function () { return cloudFetch("/files").then(function (r) { return r.json(); }).then(function (j) { return j.files || []; }); },
+    get: function (name, version) {
+      return cloudFetch("/files/" + encodeURIComponent(name) + (version ? "?v=" + version : ""))
+        .then(function (r) { return r.arrayBuffer(); }).then(function (b) { return new Uint8Array(b); });
+    },
+    put: function (name, bytes) {
+      bytes = toBytes(bytes);
+      return cloudFetch("/files/" + encodeURIComponent(name) + "?app=" + encodeURIComponent(APP || ""), { method: "PUT", body: bytes })
+        .then(function (r) { return r.json(); })
+        .then(function (j) { cloudChanged(); return { ok: true, status: 200, bytes: bytes.length, version: j.version, cloud: "https://" + CLOUD_HOST + "/" + encodeURIComponent(name) }; });
+    },
+    remove: function (name) { return cloudFetch("/files/" + encodeURIComponent(name), { method: "DELETE" }).then(cloudChanged); },
+    claim: function () { return cloudFetch("/claim", { method: "POST" }).then(function (r) { return r.json(); }); },
+    agentList: function () {
+      if (!cloud.info || !cloud.info.user) return Promise.resolve([]);
+      return cloud.list().then(function (files) {
+        return files.map(function (f) {
+          return { path: "https://" + CLOUD_HOST + "/" + encodeURIComponent(f.name), size: f.size, kind: "cloud", version: f.version, versions: f.versions, from: f.app };
+        });
+      }, function () { return []; });
+    }
+  };
+  window.CraftCloud = { status: cloud.status, list: cloud.list };
+
   /* ---------- optional: download every new export to this PC ---------- */
   var AUTO_DL_KEY = "craftAutoDownload";
   var autoDl = { on: false, seen: null, timer: null, pending: {} };
@@ -371,7 +433,16 @@
     var shelfIn = tool === "put_file" ? shelfName(args.url) : null;          // shelf -> app
     var shelfOut = tool === "send_file" ? shelfName(args.url) : null;        // app -> shelf
     var shelfRead = tool === "get_file" ? shelfName(args.path) : null;       // shelf -> conversation
-    if (((tool === "get_file" && shelfRead == null) || tool === "send_file") && !adapter.listFiles) {
+    var cloudIn = tool === "put_file" ? cloudName(args.url) : null;          // cloud -> app
+    var cloudOut = tool === "send_file" ? cloudName(args.url) : null;        // app -> cloud
+    var cloudRead = tool === "get_file" ? cloudName(args.path) : null;       // cloud -> conversation
+    if (cloudIn != null || cloudOut != null || cloudRead != null) {
+      if (!cloud.info || !cloud.info.user) {
+        reply(m.id, false, "Craft Cloud: not signed in in this tab. Ask the user to sign in under Craft Cloud in the bridge panel (or use the shelf, https://shelf/<name>).");
+        return;
+      }
+    }
+    if (((tool === "get_file" && shelfRead == null && cloudRead == null) || tool === "send_file") && !adapter.listFiles) {
       reply(m.id, false, "this app's adapter has no file API; use its own save/export commands");
       return;
     }
@@ -401,12 +472,28 @@
       }).then(done, fail);
       else if (tool === "list_files") Promise.all([
         adapter.listFiles ? Promise.resolve(adapter.listFiles()) : Promise.resolve([]),
-        shelf.list().catch(function () { return []; })
-      ]).then(function (r) { return (r[0] || []).concat(r[1]); }).then(done, fail);
-      else if (tool === "get_file") Promise.resolve(shelfRead != null ? shelf.get(shelfRead) : adapter.file(args.path)).then(function (bytes) {
+        shelf.list().catch(function () { return []; }),
+        cloud.agentList()
+      ]).then(function (r) { return (r[0] || []).concat(r[1], r[2]); }).then(done, fail);
+      else if (tool === "get_file") Promise.resolve(cloudRead != null ? cloud.get(cloudRead) : shelfRead != null ? shelf.get(shelfRead) : adapter.file(args.path)).then(function (bytes) {
         var kit = window.CraftRelayFileKit;
-        return { base64: kit.toBase64(toBytes(bytes)), kind: kit.mimeFor(shelfRead != null ? shelfRead : args.path) };
+        return { base64: kit.toBase64(toBytes(bytes)), kind: kit.mimeFor(cloudRead != null ? cloudRead : shelfRead != null ? shelfRead : args.path) };
       }).then(done, fail);
+      else if (tool === "send_file" && cloudOut != null) Promise.resolve(adapter.file(args.path)).then(function (bytes) {
+        return cloud.put(cloudOut || baseName(args.path), bytes);
+      }).then(function (r) {
+        pushLog({ t: Date.now(), tool: "cloud ← " + baseName(args.path), ms: Math.round(performance.now() - t0) });
+        reply(m.id, true, r);
+      }, fail);
+      else if (tool === "put_file" && cloudIn != null) cloud.get(cloudIn).then(function (bytes) {
+        var name = args.name || baseName(cloudIn);
+        noteImport(name);
+        return adapter.importFile({ name: name, base64: window.CraftRelayFileKit.toBase64(bytes), url: null });
+      }).then(function (r) {
+        if (r instanceof Error) throw r;
+        pushLog({ t: Date.now(), tool: "cloud → " + baseName(cloudIn), ms: Math.round(performance.now() - t0) });
+        reply(m.id, true, r === undefined ? { ok: true, imported: args.name || baseName(cloudIn) } : r);
+      }, fail);
       else if (tool === "send_file" && shelfOut != null) Promise.resolve(adapter.file(args.path)).then(function (bytes) {
         return shelf.put(shelfOut || baseName(args.path), bytes);
       }).then(function (r) {
@@ -453,7 +540,7 @@
    * relays from before that send none, which counts as 1. This file is served by
    * the site, so it always knows the newest relay. Bump RELAY_LATEST with every
    * relay change; raise RELAY_REQUIRED only when an older relay would actually fail. */
-  var RELAY_LATEST = 2, RELAY_REQUIRED = 1;
+  var RELAY_LATEST = 3, RELAY_REQUIRED = 1;
   var relayEl, fabEl;
   function showRelayNotice(v) {
     if (!relayEl) return;
@@ -518,7 +605,136 @@
   var shelfChannel = null;
   try { shelfChannel = new BroadcastChannel("craft-shelf"); shelfChannel.onmessage = function () { renderShelf(); }; } catch (e) { /* older browser */ }
   function shelfChanged() { renderShelf(); try { if (shelfChannel) shelfChannel.postMessage("changed"); } catch (e) { /* ignore */ } }
-  document.addEventListener("visibilitychange", function () { if (!document.hidden) renderShelf(); });
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) { renderShelf(); renderCloud(); } });
+
+  /* ---------- Craft Cloud section of the panel ---------- */
+  var cloudEl;
+  var cloudChannel = null;
+  try { cloudChannel = new BroadcastChannel("craft-cloud"); cloudChannel.onmessage = function () { renderCloud(); }; } catch (e) { /* older browser */ }
+  function cloudChanged() { renderCloud(); try { if (cloudChannel) cloudChannel.postMessage("changed"); } catch (e) { /* ignore */ } }
+  function mb(n) { return n < 1048576 ? Math.max(1, Math.round(n / 1024)) + " KB" : (n / 1048576).toFixed(n < 10485760 ? 1 : 0) + " MB"; }
+  function untilText(iso) {
+    var h = Math.max(0, (Date.parse(iso) - Date.now()) / 3600000);
+    return h >= 48 ? Math.floor(h / 24) + " days" : h >= 1 ? Math.floor(h) + " hours" : Math.ceil(h * 60) + " minutes";
+  }
+  function cloudMsg(t, bad) {
+    var m = cloudEl && cloudEl.querySelector(".cmsg");
+    if (m) { m.textContent = t || ""; m.style.color = bad ? "#e07a5e" : "#9a9daa"; m.style.display = t ? "block" : "none"; }
+  }
+  function renderCloud() {
+    if (!cloudEl) return;
+    cloud.status().then(drawCloud, function () { cloudEl.style.display = "none"; });
+  }
+  function drawCloud(s) {
+    var c = cloudEl;
+    c.style.display = "block";
+    c.textContent = "";
+    var head = el("div", { class: "chead" }, [el("b", { text: "Craft Cloud" })]);
+    c.appendChild(head);
+    var msg = el("div", { class: "cmsg", style: "display:none;" });
+
+    if (s.mode === "claimed") {
+      c.appendChild(el("div", { class: "csub", text: s.message || "Claimed: set DATABASE_URL on the cloud service." }));
+      return;
+    }
+    if (!s.user) {
+      var email = el("input", { type: "text", placeholder: "email", spellcheck: "false", autocomplete: "username" });
+      var pw = el("input", { type: "password", placeholder: "password", autocomplete: "current-password" });
+      var go = function (kind) {
+        if (!email.value.trim() || !pw.value) { cloudMsg("email and password are both required", true); return; }
+        cloudMsg(kind === "sign-up" ? "creating your account…" : "signing in…");
+        cloud.auth(kind, email.value.trim(), pw.value).then(function () { cloudChanged(); }, function (e) { cloudMsg(e.message, true); });
+      };
+      pw.addEventListener("keydown", function (ev) { if (ev.key === "Enter") { ev.preventDefault(); go("sign-in"); } });
+      c.appendChild(el("div", { class: "csub", text: "Save your work to the cloud and open it in any app, on any device. Your work stays only in this browser until you sign in." }));
+      c.appendChild(email);
+      c.appendChild(pw);
+      c.appendChild(el("div", { class: "row" }, [
+        el("button", { class: "act", text: "Sign in", onclick: function () { go("sign-in"); } }),
+        el("button", { class: "act ghost", text: "Create account", onclick: function () { go("sign-up"); } })
+      ]));
+      c.appendChild(msg);
+      return;
+    }
+
+    head.appendChild(el("span", { class: "cwho", text: s.user.email || "signed in" }));
+    head.appendChild(el("button", { class: "mini", text: "Sign out", onclick: function () { cloud.signOut().then(cloudChanged); } }));
+    c.appendChild(el("div", { class: "csub", text: s.limitBytes ? mb(s.usedBytes) + " of " + mb(s.limitBytes) + " used" : mb(s.usedBytes) + " used" }));
+
+    // Save one of this app's files.
+    var adapter = state.adapter;
+    if (adapter && adapter.listFiles && adapter.file) {
+      var pick = el("select", { class: "cpick" });
+      var saveBtn = el("button", { class: "mini", text: "Save to cloud" });
+      saveBtn.addEventListener("click", function () {
+        var p = pick.value;
+        if (!p) return;
+        saveBtn.disabled = true;
+        cloudMsg("saving " + baseName(p) + "…");
+        Promise.resolve(adapter.file(p)).then(function (bytes) { return cloud.put(baseName(p), bytes); }).then(function (r) {
+          cloudMsg("saved " + baseName(p) + " (version " + r.version + ")");
+          pushLog({ t: Date.now(), tool: "cloud ← " + baseName(p) });
+        }, function (e) { cloudMsg(e.message, true); }).then(function () { saveBtn.disabled = false; });
+      });
+      Promise.resolve(adapter.listFiles()).then(function (files) {
+        files = (files || []).filter(function (f) { return f && f.path && f.kind !== "shelf" && f.kind !== "cloud"; });
+        if (!files.length) { pick.appendChild(el("option", { value: "", text: "no files in this app yet" })); saveBtn.disabled = true; return; }
+        files.forEach(function (f) { pick.appendChild(el("option", { value: f.path, text: baseName(f.path) + (f.size ? " (" + mb(f.size) + ")" : "") })); });
+      }, function () { pick.appendChild(el("option", { value: "", text: "this app isn't ready yet" })); saveBtn.disabled = true; });
+      c.appendChild(el("div", { class: "csave" }, [pick, saveBtn]));
+    } else {
+      c.appendChild(el("div", { class: "csub", text: "This app can't hand files to the cloud yet; files you saved from other apps are listed below." }));
+    }
+
+    // The library.
+    var listEl = el("div", { class: "clist", text: "loading…" });
+    c.appendChild(listEl);
+    cloud.list().then(function (files) {
+      listEl.textContent = "";
+      if (!files.length) { listEl.appendChild(el("div", { class: "csub", text: "Nothing saved yet." })); return; }
+      files.forEach(function (f) {
+        var openBtn = null;
+        if (adapter && adapter.importFile) {
+          openBtn = el("button", { class: "mini", text: "Open", title: "Open the newest version in this app", onclick: function () {
+            cloudMsg("opening " + f.name + "…");
+            cloud.get(f.name).then(function (bytes) {
+              noteImport(f.name);
+              return adapter.importFile({ name: f.name, base64: window.CraftRelayFileKit.toBase64(bytes), url: null });
+            }).then(function (r) {
+              if (r instanceof Error) throw r;
+              cloudMsg("opened " + f.name);
+            }, function (e) { cloudMsg(e.message, true); });
+          } });
+        }
+        var dl = el("button", { class: "mini", text: "↓", title: "Download to this PC", onclick: function () {
+          cloud.get(f.name).then(function (bytes) { saveBlob(f.name, bytes); }, function (e) { cloudMsg(e.message, true); });
+        } });
+        listEl.appendChild(el("div", { class: "cfile" }, [
+          el("span", { text: f.name, title: f.name + (f.app ? " — from " + f.app : "") }),
+          el("i", { text: "v" + f.version + " · " + mb(f.size) }),
+          openBtn, dl
+        ]));
+      });
+    }, function (e) { listEl.textContent = e.message; });
+
+    if (s.mode === "unclaimed") {
+      var keep = el("div", { class: "ckeep" });
+      keep.appendChild(el("div", { text: "This cloud is a free Neon project that is deleted in " + untilText(s.expiresAt) + " unless it's claimed." }));
+      if (s.user.owner) {
+        keep.appendChild(el("button", { class: "mini", text: s.claimUrl ? "Continue claiming in Neon" : "Keep it: claim in Neon", onclick: function () {
+          var w = window.open("about:blank", "_blank");
+          (s.claimUrl ? Promise.resolve({ url: s.claimUrl }) : cloud.claim()).then(function (r) {
+            if (w) w.location.href = r.url; else window.open(r.url, "_blank", "noopener");
+            cloudMsg("Finish in the Neon tab. Then copy the project's connection string into the craft-cloud service's DATABASE_URL on Railway.");
+          }, function (e) { if (w) w.close(); cloudMsg(e.message, true); });
+        } }));
+      } else {
+        keep.appendChild(el("div", { text: "The site's owner can claim it to keep it." }));
+      }
+      c.appendChild(keep);
+    }
+    c.appendChild(msg);
+  }
 
   function buildUI() {
     host = el("div", { style: "position:fixed;right:16px;bottom:16px;z-index:2147483646;" });
@@ -530,7 +746,7 @@
       "* { box-sizing: border-box; }",
       ".fab { width:40px; height:40px; border-radius:50%; border:1px solid #3a3d48; background:#1d1f27; color:#e8e9ee; cursor:pointer; font-size:17px; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 14px rgba(0,0,0,.5); margin-left:auto; }",
       ".fab:hover { border-color:#6d5df6; }",
-      ".panel { position:absolute; right:0; bottom:52px; width:320px; background:#1d1f27; border:1px solid #3a3d48; border-radius:12px; padding:14px; color:#e8e9ee; box-shadow:0 8px 30px rgba(0,0,0,.55); }",
+      ".panel { position:absolute; right:0; bottom:52px; width:320px; max-height:calc(100vh - 90px); overflow:auto; background:#1d1f27; border:1px solid #3a3d48; border-radius:12px; padding:14px; color:#e8e9ee; box-shadow:0 8px 30px rgba(0,0,0,.55); }",
       ".panel h3 { margin:0 0 2px; font-size:14px; }",
       ".status { font-size:12px; margin-bottom:8px; }",
       ".note { font-size:11.5px; color:#e0b25e; margin-bottom:6px; min-height:0; }",
@@ -554,11 +770,26 @@
       ".shelf span { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }",
       "button.mini { border:0; border-radius:6px; padding:3px 8px; font-size:11px; cursor:pointer; background:#2a2d38; color:#c9ccd6; }",
       ".log { background:#14151a; border-radius:8px; padding:8px; max-height:150px; overflow:auto; font:11px ui-monospace,monospace; color:#b9bcc7; }",
-      ".log div { margin:1px 0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }"
+      ".log div { margin:1px 0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }",
+      ".cloud { background:#14151a; border-radius:8px; padding:8px; margin-bottom:12px; font-size:11.5px; color:#c9ccd6; }",
+      ".chead { display:flex; align-items:center; gap:6px; margin-bottom:4px; }",
+      ".chead b { font-size:12.5px; color:#e8e9ee; }",
+      ".cwho { flex:1; color:#9a9daa; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:right; }",
+      ".csub { color:#9a9daa; margin-bottom:6px; }",
+      ".cmsg { margin-top:6px; }",
+      ".csave { display:flex; gap:6px; margin-bottom:6px; }",
+      ".cpick { flex:1; min-width:0; background:#1d1f27; color:#e8e9ee; border:1px solid #3a3d48; border-radius:6px; font-size:11.5px; padding:2px 4px; }",
+      ".clist { max-height:140px; overflow:auto; }",
+      ".cfile { display:flex; align-items:center; gap:6px; padding:3px 0; border-top:1px solid #23252e; }",
+      ".cfile span { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }",
+      ".cfile i { font-style:normal; color:#6a6d78; white-space:nowrap; }",
+      ".ckeep { margin-top:6px; padding:6px 8px; border-radius:6px; background:rgba(109,93,246,.1); border:1px solid rgba(109,93,246,.35); color:#c9ccd6; }",
+      ".ckeep button { margin-top:4px; }",
+      ".cloud input[type=text],.cloud input[type=password] { margin:2px 0 6px; }"
     ].join("\n") });
     root.appendChild(style);
 
-    var fab = el("button", { class: "fab", title: "Agent bridge", text: "⦿", onclick: function () { panelOpen = !panelOpen; panel.style.display = panelOpen ? "block" : "none"; } });
+    var fab = el("button", { class: "fab", title: "Agent bridge and Craft Cloud", text: "⦿", onclick: function () { panelOpen = !panelOpen; panel.style.display = panelOpen ? "block" : "none"; if (panelOpen) renderCloud(); } });
     fabEl = fab;
     root.appendChild(fab);
 
@@ -592,6 +823,8 @@
       setNote("");
     } });
 
+    cloudEl = el("div", { class: "cloud", style: "display:none;" });
+    panel.appendChild(cloudEl);
     panel.appendChild(el("h3", { text: "Agent bridge" }));
     panel.appendChild(statusEl);
     panel.appendChild(noteEl);
@@ -612,6 +845,7 @@
     ]);
     panel.appendChild(shelfEl);
     renderShelf();
+    renderCloud();
     panel.appendChild(el("div", { class: "priv", text: "While connected, an agent can run commands in this tab and request previews of what you are editing. Nothing is stored on the relay. Disconnect at any time." }));
     logEl = el("div", { class: "log" });
     panel.appendChild(logEl);
