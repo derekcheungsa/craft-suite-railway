@@ -146,6 +146,14 @@ Claude with someone else's site, deploy your own copy first; its relay belongs t
    `BRIDGE_TOKEN`, and Connect. Connect more app tabs the same way; one connector reaches
    them all.
 
+**Claude Code shortcut:** the `craft-relay` service's `CLAUDE_CODE_CONNECT` variable holds the
+whole command with your domain and token filled in, ready to paste into a terminal. Its value in
+the template:
+
+```
+claude mcp add --transport http craft-suite https://${{craft-suite.RAILWAY_PUBLIC_DOMAIN}}/relay/mcp --header "Authorization: Bearer ${{MCP_TOKEN}}"
+```
+
 Running only the relay (without the suite): fork this repo, deploy it on Railway with
 **Root Directory** `server`, set the two variables, generate a domain, and enter that
 domain (not `/relay`) as the relay address in the panel.

@@ -131,6 +131,7 @@
       <li><b>Find your two passwords:</b> in Railway, open your project&rsquo;s <code>craft-relay</code> service &rarr; <b>Variables</b>. Note <code>MCP_TOKEN</code> (for Claude) and <code>BRIDGE_TOKEN</code> (for the apps). If they aren&rsquo;t there, add them yourself: 32+ random characters for <code>MCP_TOKEN</code>, 16+ for <code>BRIDGE_TOKEN</code>. Keep both private.</li>
       <li><b>Find your relay&rsquo;s address:</b> on the same service, <b>Settings &rarr; Networking</b>. It looks like <code>https://craft-relay-production.up.railway.app</code>. If there isn&rsquo;t one, click <b>Generate Domain</b>.</li>
       <li><b>Connect Claude:</b> in Claude, open <b>Customize &rarr; Connectors &rarr; Add custom connector</b>. Name it <i>Craft Suite</i>, and for the server URL enter your relay&rsquo;s address followed by <code>/mcp</code>. Click <b>Continue</b>, then under <b>Request headers</b> add the header <code>Authorization</code> with the value <code>Bearer</code>, a space, and your <code>MCP_TOKEN</code>. Claude sends the value exactly as typed, so include the word <code>Bearer</code>.</li>
+      <li><b>Or use Claude Code:</b> copy the <code>CLAUDE_CODE_CONNECT</code> variable from the same <code>craft-relay</code> service and paste it into a terminal. It&rsquo;s the whole <code>claude mcp add</code> command, with your address and <code>MCP_TOKEN</code> already filled in.</li>
     </ol>
     <h3>Each time you want Claude&rsquo;s help</h3>
     <ol>
