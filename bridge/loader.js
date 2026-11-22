@@ -770,7 +770,7 @@
         files.forEach(function (f) { pick.appendChild(el("option", { value: f.path, text: baseName(f.path) + (f.size ? " (" + mb(f.size) + ")" : "") })); });
       }, function () { pick.appendChild(el("option", { value: "", text: "this app isn't ready yet" })); saveBtn.disabled = true; });
       c.appendChild(el("div", { class: "csave" }, [pick, saveBtn]));
-    } else {
+    } else if (!(adapter && adapter.saveCurrent)) {
       c.appendChild(el("div", { class: "csub", text: "This app can't hand files to the cloud yet; files you saved from other apps are listed below." }));
     }
 
