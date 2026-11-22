@@ -564,7 +564,7 @@
 
   /* The page-host shim: only on an app page whose spec has openExt, and only once. */
   var PAGE_APP = location.pathname.split("/").filter(Boolean)[0] || "";
-  var hostState = { files: [], dirty: false, lastError: null, ready: false };
+  var hostState = { files: [], dirty: false, lastError: null, ready: false, capture: null };
   function hostCanvas(app) {
     var spec = CRAFT_HOSTED[app];
     return document.getElementById(spec && spec.canvasId || app.replace(/-/g, "_") + "_canvas");
@@ -581,6 +581,14 @@
       hostState.files = hostState.files.filter(function (f) { return f.path !== name; });
       hostState.files.unshift({ path: name, size: bytes ? bytes.length : 0, kind: d.saveAs ? "save-as" : "save", savedAt: new Date().toISOString(), bytes: bytes });
       hostState.files = hostState.files.slice(0, 20);
+      // A save Craft Cloud asked for goes to the cloud, not the Downloads folder.
+      if (hostState.capture) {
+        var cap = hostState.capture;
+        hostState.capture = null;
+        if (d.id) canvas.dispatchEvent(new CustomEvent(app + ":saved", { detail: { id: d.id } }));
+        cap(name.split("/").pop(), bytes);
+        return;
+      }
       // Still hand the file to the user, as the app does when it isn't hosted.
       try {
         var a = document.createElement("a");
@@ -698,6 +706,43 @@
       },
       listFiles: spec.openExt ? function () {
         return hostState.files.map(function (f) { return { path: f.path, size: f.size, kind: f.kind, savedAt: f.savedAt }; });
+      } : undefined,
+      /* Craft Cloud: the open document, saved the way the app saves it (its own
+       * format: .docx, .xlsx, .deckcraft, .figcraft, .dxf, .pdf). The app's save
+       * command (file.save) when it has one that works here, else its Ctrl+S; the
+       * save comes back through the page host and skips the download. */
+      saveCurrent: spec.openExt ? function () {
+        var canvas = hostCanvas(app);
+        if (!canvas || canvas.getAttribute("data-host") !== "page") return Promise.reject(new Error("reload this tab, then try again"));
+        if (hostState.capture) return Promise.reject(new Error("a save is already in progress"));
+        return new Promise(function (resolve, reject) {
+          var timer = null;
+          var done = function (err, name, bytes) {
+            clearTimeout(timer);
+            if (hostState.capture === capture) hostState.capture = null;
+            if (err) reject(err); else resolve({ name: name, bytes: bytes });
+          };
+          var capture = function (name, bytes) { done(null, name, bytes); };
+          hostState.capture = capture;
+          var keySave = function () {
+            // The app reads keys only while its canvas has focus (the panel button has it now).
+            try { if (!canvas.hasAttribute("tabindex")) canvas.setAttribute("tabindex", "0"); canvas.focus({ preventScroll: true }); } catch (e) { /* ignore */ }
+            ["keydown", "keyup"].forEach(function (type) {
+              canvas.dispatchEvent(new KeyboardEvent(type, { key: "s", code: "KeyS", ctrlKey: true, bubbles: true, cancelable: true }));
+            });
+          };
+          var wait = function (ms, why) {
+            timer = setTimeout(function () { done(new Error(why)); }, ms);
+          };
+          Promise.resolve().then(function () { return viaEngine("file.save", {}); }).then(function () {
+            wait(15000, app + " didn't hand over the document; try saving it in the app once, then Save to cloud");
+          }, function (e) {
+            var m = String(e && e.message || e);
+            if (/disabled|no document|not open/i.test(m)) { done(new Error("open a document first")); return; }
+            keySave(); // no usable save command here: the app's own shortcut
+            wait(8000, "nothing to save: open or create a document first");
+          });
+        });
       } : undefined,
       file: function (path) {
         for (var i = 0; i < hostState.files.length; i++) if (hostState.files[i].path === path) return hostState.files[i].bytes;

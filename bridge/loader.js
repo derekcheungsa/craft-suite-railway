@@ -705,22 +705,38 @@
     // Save the open document (apps that can export it), or one of the app's files.
     var adapter = state.adapter;
     if (adapter && adapter.saveCurrent) {
-      var nameIn = el("input", { type: "text", class: "cname", spellcheck: "false", placeholder: "name.png" });
+      // PhotoCraft exports a PNG we name; the other apps save in their own format
+      // under the document's own name (the field can rename it).
+      var fixedExt = adapter.currentName ? ".png" : null;
+      var nameIn = el("input", { type: "text", class: "cname", spellcheck: "false", placeholder: fixedExt ? "name.png" : "the document's name" });
       var saveDoc = el("button", { class: "mini primary", text: "Save to cloud" });
-      Promise.resolve(adapter.currentName()).then(function (n) {
-        if (n) nameIn.value = n;
-        else { nameIn.placeholder = "open a document first"; }
-      });
+      if (adapter.currentName) {
+        Promise.resolve(adapter.currentName()).then(function (n) {
+          if (n) nameIn.value = n;
+          else { nameIn.placeholder = "open a document first"; }
+        });
+      }
       saveDoc.addEventListener("click", function () {
-        var name = (nameIn.value || "").trim();
-        if (!name) { cloudMsg("open a document first, then name it", true); return; }
-        if (!/\.png$/i.test(name)) name += ".png";
+        var want = (nameIn.value || "").trim();
+        if (fixedExt && !want) { cloudMsg("open a document first, then name it", true); return; }
         saveDoc.disabled = true;
-        cloudMsg("saving " + name + "…");
-        Promise.resolve(adapter.saveCurrent()).then(function (bytes) { return cloud.put(name, bytes); }).then(function (r) {
-          cloudMsg("saved " + name + (r.version > 1 ? " (version " + r.version + ")" : ""));
-          pushLog({ t: Date.now(), tool: "cloud ← " + name });
-        }, function (e) { cloudMsg(e.message, true); }).then(function () { saveDoc.disabled = false; });
+        cloudMsg("saving…");
+        Promise.resolve(adapter.saveCurrent()).then(function (r) {
+          var bytes = r && r.bytes ? r.bytes : r;
+          var own = r && r.name ? r.name : null;
+          var name;
+          if (fixedExt) name = /\.png$/i.test(want) ? want : want + ".png";
+          else {
+            var ext = own && /\.[a-z0-9]{1,10}$/i.exec(own);
+            name = want ? (ext && !/\.[a-z0-9]{1,10}$/i.test(want) ? want + ext[0] : want) : (own || "document");
+          }
+          cloudMsg("saving " + name + "…");
+          return cloud.put(name, bytes).then(function (res) {
+            if (!fixedExt && !want) nameIn.placeholder = name;
+            cloudMsg("saved " + name + (res.version > 1 ? " (version " + res.version + ")" : ""));
+            pushLog({ t: Date.now(), tool: "cloud ← " + name });
+          });
+        }).catch(function (e) { cloudMsg(e.message, true); }).then(function () { saveDoc.disabled = false; });
       });
       c.appendChild(el("div", { class: "csub", text: "This document:" }));
       c.appendChild(el("div", { class: "csave" }, [nameIn, saveDoc]));

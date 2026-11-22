@@ -15,8 +15,12 @@ under **Craft Cloud** in the ⦿ panel and saves a file.
   owner can sign in. Anyone else visiting the site keeps using the apps with
   local saving, and the panel offers them a private copy of their own
   (`TEMPLATE_URL`, the Railway template).
-- **Library:** files from any app, saved from the panel or by Claude with
-  `https://cloud/<name>`. Every app tab on the site sees the same library, on any
+- **Library:** the open document, saved from the ⦿ panel with one click, or by
+  Claude with `https://cloud/<name>`. WordCraft, GridCraft, DeckCraft, FigCraft,
+  CADCraft and PdfCraft save in their own format (.docx, .xlsx, .deckcraft,
+  .figcraft, .dxf, .pdf) under the document's name; PhotoCraft saves a full-size
+  PNG of the image. The app's own save runs, and the file goes to the cloud
+  instead of the Downloads folder. Every app tab on the site sees the same library, on any
   device.
 - **Versions:** saving the same name again adds a version; older versions stay
   readable (`GET /cloud/files/<name>?v=1`).
