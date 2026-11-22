@@ -550,7 +550,10 @@
       control: UI_COMMON.concat(["document.inspect", "app.open", "app.save", "app.export", "show.start", "show.end",
         "slide.actions", "ui.dialog.open", "ui.dialog.close", "ui.ime", "ui.menu.invoke", "ui.pointer", "ui.render", "ui.tool.select"]),
       readOnly: ["document.inspect", "ui.inspect", "ui.screenshot", "ui.render"],
-      openExt: /\.(pptx|potx|odp)$/i
+      openExt: /\.(pptx|potx|odp)$/i,
+      // The web build's own save is a .deckcraft file and Save As can't pick a format
+      // there, so Craft Cloud asks the engine for the .pptx bytes instead.
+      saveBytes: { command: "file.saveBytes", params: { format: "pptx" }, ext: ".pptx" }
     },
     cadcraft: {
       versions: ["0.17.0-main", "0.20"],
@@ -691,6 +694,19 @@
       });
     }
     var soft = function (p) { return Promise.resolve(p).catch(function (e) { return { error: String(e && e.message || e) }; }); };
+    // spec.saveBytes: the open document encoded by the engine, named after its title.
+    function exportBytes() {
+      var sb = spec.saveBytes;
+      return Promise.all([soft(call("file.info", {})), call(sb.command, sb.params)]).then(function (r) {
+        var info = typeof r[0] === "string" ? JSON.parse(r[0]) : r[0];
+        var out = typeof r[1] === "string" ? JSON.parse(r[1]) : r[1];
+        var b64 = out && (out.data || out.base64);
+        if (!b64) throw new Error("open or create a document in " + app + " first");
+        var title = info && !info.error && (info.title || (info.path || "").split("/").pop());
+        title = String(title || "Untitled").replace(/\.[a-z0-9]{2,10}$/i, "");
+        return { name: title + sb.ext, bytes: fromBase64(b64) };
+      });
+    }
     return {
       app: app,
       versions: spec.versions,
@@ -750,7 +766,7 @@
        * format: .docx, .xlsx, .deckcraft, .figcraft, .dxf, .pdf). The app's save
        * command (file.save) when it has one that works here, else its Ctrl+S; the
        * save comes back through the page host and skips the download. */
-      saveCurrent: spec.openExt ? function () {
+      saveCurrent: spec.saveBytes ? function () { return exportBytes(); } : spec.openExt ? function () {
         var canvas = hostCanvas(app);
         if (!canvas || canvas.getAttribute("data-host") !== "page") return Promise.reject(new Error("reload this tab, then try again"));
         if (hostState.capture) return Promise.reject(new Error("a save is already in progress"));
@@ -785,6 +801,10 @@
       } : undefined,
       file: function (path) {
         for (var i = 0; i < hostState.files.length; i++) if (hostState.files[i].path === path) return hostState.files[i].bytes;
+        // The open document in the format Craft Cloud keeps (DeckCraft: .pptx), when asked for by that extension.
+        if (spec.saveBytes && (path || "").toLowerCase().slice(-spec.saveBytes.ext.length) === spec.saveBytes.ext) {
+          return exportBytes().then(function (r) { return r.bytes; });
+        }
         // A .png that isn't in the file table: the open design, exported (apps with exportCurrent).
         if (spec.exportCurrent && /\.png$/i.test(path || "")) return spec.exportCurrent(call).then(function (r) { return fromBase64(r.base64); });
         throw new Error(path + ": not in the file table (save or export it in the app first; list_files shows what's there)");
