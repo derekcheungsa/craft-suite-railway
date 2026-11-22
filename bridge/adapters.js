@@ -401,11 +401,35 @@
       });
     },
     listFiles: function () { return window.vectorcraft.files(); },
+    /* Craft Cloud: the web build has no file system, so saves and exports
+     * never reach files(). Export the open document instead (artboard 1, no
+     * background fill): document.export without a path returns dataBase64. */
+    currentName: function () {
+      return Promise.resolve(window.vectorcraft.inspect()).then(function (ins) {
+        var d = ins && (ins.document || (ins.documents && ins.documents[ins.active || 0]));
+        var n = d && (d.name || d.title);
+        return n ? String(n).replace(/\*$/, "").replace(/\.[a-z0-9]{2,5}$/i, "") + ".png" : null;
+      }, function () { return null; });
+    },
+    exportCurrent: function (format) {
+      return Promise.resolve(window.vectorcraft.execute("document.export", { format: format || "png", includeArtboardFill: false })).then(function (r) {
+        var b = r && (r.dataBase64 || r.data_base64 || r.data);
+        if (!b) throw new Error("open or create a document in VectorCraft first");
+        return window.CraftRelayFileKit.fromBase64(b);
+      });
+    },
+    saveCurrent: function () { return this.exportCurrent("png"); },
     file: function (path) {
-      return Promise.resolve(window.vectorcraft.readFile(path)).then(function (bytes) {
+      var self = this;
+      return Promise.resolve().then(function () { return window.vectorcraft.readFile(path); }).then(function (bytes) {
         if (bytes && bytes instanceof Error) throw bytes;
         if (!bytes) throw new Error(path + ": not found");
         return bytes;
+      }).catch(function (e) {
+        // A name ending in .png or .svg that isn't in the file table: the open document, exported.
+        var m = /\.(png|svg)$/i.exec(path || "");
+        if (!m) throw e;
+        return self.exportCurrent(m[1].toLowerCase());
       });
     },
     sendFile: function (path, url, method) {
@@ -504,7 +528,22 @@
       urlFlag: "control",
       control: UI_COMMON.concat(["document.inspect", "doc.list", "ui.input", "ui.pointer", "ui.menu.invoke", "ui.render", "command.batch"]),
       readOnly: ["document.inspect", "doc.list", "ui.inspect", "ui.screenshot", "ui.render"],
-      openExt: /\.(fig|figcraft|svg|png|jpe?g)$/i
+      openExt: /\.(fig|figcraft|svg|png|jpe?g)$/i,
+      // An agent's send_file of a .png (https://cloud/<name>.png): the web build has no file
+      // system, so export the current page's first frame (or the page) as PNG. The panel's
+      // Save to cloud keeps the app's own .figcraft save.
+      exportCurrent: function (call) {
+        return call("document.inspect", {}).then(function (d) {
+          d = typeof d === "string" ? JSON.parse(d) : d;
+          var page = d && d.pages && d.pages[(d.currentPage || 1) - 1];
+          var top = page && page.children && page.children[0];
+          return call("file.export", top ? { ids: [top.id], format: "png" } : { format: "png" }).then(function (r) {
+            r = typeof r === "string" ? JSON.parse(r) : r;
+            if (!r || !r.data) throw new Error("open or create a design in FigCraft first");
+            return { name: (d.name || "Untitled") + ".png", base64: r.data };
+          });
+        });
+      }
     },
     deckcraft: {
       versions: ["0.15.0-main", "0.18"],
@@ -746,6 +785,8 @@
       } : undefined,
       file: function (path) {
         for (var i = 0; i < hostState.files.length; i++) if (hostState.files[i].path === path) return hostState.files[i].bytes;
+        // A .png that isn't in the file table: the open design, exported (apps with exportCurrent).
+        if (spec.exportCurrent && /\.png$/i.test(path || "")) return spec.exportCurrent(call).then(function (r) { return fromBase64(r.base64); });
         throw new Error(path + ": not in the file table (save or export it in the app first; list_files shows what's there)");
       },
       sendFile: function (path, url, method) {
