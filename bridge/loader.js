@@ -569,7 +569,7 @@
     relayEl.appendChild(el("div", { text: level === "required"
       ? "Some features won't work until you update it."
       : "Everything still works; the update adds improvements." }));
-    relayEl.appendChild(el("div", { text: "On GitHub, open your copy of the Craft Suite project → Sync fork → Update branch. Railway rebuilds your relay in a few minutes; then reconnect here." }));
+    relayEl.appendChild(el("div", { text: "In Railway, open your craft-relay service and press Ctrl+K → Deploy latest commit (or Sync fork on GitHub if you run your own fork). It rebuilds in a few minutes; then reconnect here." }));
     var how = el("a", { text: "How to update", href: "/guide/#claude", target: "_blank", rel: "noopener" });
     relayEl.appendChild(how);
   }

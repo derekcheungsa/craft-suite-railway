@@ -128,25 +128,33 @@ relay's `/mcp` address; a small panel in each app page (the ⦿ button) opens a
 connection back to the relay once you click **Connect** and paste the bridge token.
 Nothing connects until you do, and a Disconnect button is always visible.
 
-**Setting up your own relay** (needed to use Claude with someone else's Craft Suite
-site, whose relay belongs to its owner):
+**Connecting Claude.** Every copy of Craft Suite deployed from the Railway template
+has its own relay (the `craft-relay` service), and the site reaches it at `/relay`. To use
+Claude with someone else's site, deploy your own copy first; its relay belongs to you.
 
-1. Fork this repo on GitHub.
-2. In Railway: **New Project → Deploy from GitHub repo →** your fork. In the service's
-   **Settings**, set **Root Directory** to `server`.
-3. In **Variables**, add `MCP_TOKEN` (32+ random characters, e.g.
-   `openssl rand -base64 32`) and `BRIDGE_TOKEN` (16+ characters). Optionally set
-   `ALLOWED_ORIGINS` to the suite's address so only that site can open bridge connections.
-4. **Settings → Networking → Generate Domain.**
-5. In Claude: **Settings → Connectors → Add custom connector**, URL
-   `https://<your-relay-domain>/mcp`, header `Authorization: Bearer <MCP_TOKEN>`.
-6. On the suite site, open an app, click ⦿, set the relay address to
-   `https://<your-relay-domain>`, paste your `BRIDGE_TOKEN`, and Connect.
+1. In Railway, open `craft-relay` → **Variables** and note `MCP_TOKEN` (32+ random
+   characters) and `BRIDGE_TOKEN` (16+). Add them if they're missing. Optionally set
+   `ALLOWED_ORIGINS` to the suite's address so only that site can open bridge connections,
+   and `MAX_TABS` (default 10).
+2. **Settings → Networking**: note the relay's domain (**Generate Domain** if it has none).
+3. In Claude: **Customize → Connectors → Add custom connector**, server URL
+   `https://<your-relay-domain>/mcp`, **Continue**, then under **Request headers** add
+   `Authorization` with the value `Bearer <MCP_TOKEN>` (Claude sends the value as typed,
+   so include `Bearer `). In Claude Code:
+   `claude mcp add --transport http craft https://<your-relay-domain>/mcp --header "Authorization: Bearer <MCP_TOKEN>"`.
+4. On your suite, open an app, click ⦿, leave the relay address as `/relay`, paste your
+   `BRIDGE_TOKEN`, and Connect. Connect more app tabs the same way; one connector reaches
+   them all.
 
-The guide's "Using Claude" section walks through the same steps for visitors. Keep both
+Running only the relay (without the suite): fork this repo, deploy it on Railway with
+**Root Directory** `server`, set the two variables, generate a domain, and enter that
+domain (not `/relay`) as the relay address in the panel.
+
+The guide's "Optional: let Claude drive the apps" section walks through the same steps. Keep both
 tokens private: anyone with `MCP_TOKEN` can drive tabs connected to your relay, and
 anyone with `BRIDGE_TOKEN` can connect tabs to it. When this repo's relay changes, the
-agent panel shows a notice; update your fork with GitHub's **Sync fork** button.
+agent panel shows a notice: update your copy in Railway (**Deploy latest commit**), or
+sync your fork with GitHub's **Sync fork** button if you run your own fork.
 
 **Tools:** `list_sessions`, `list_commands`, `run_command`, `run_batch` (up to 20),
 `inspect`, `get_image` (previews up to 1 MB), `list_files`, `get_file` (small files),
