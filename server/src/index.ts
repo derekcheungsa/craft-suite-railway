@@ -56,7 +56,9 @@ function rateLimit(key: string, perSecond = 10, burst = 10): boolean {
 }
 
 // ---------- registry ----------
-const registry = new TabRegistry(5, CALL_TIMEOUT_MS);
+// Connected tabs at once (env MAX_TABS, 1–50; default 10).
+const MAX_TABS = Math.min(50, Math.max(1, parseInt(process.env.MAX_TABS ?? "10", 10) || 10));
+const registry = new TabRegistry(MAX_TABS, CALL_TIMEOUT_MS);
 const denylist = new Denylist(DENYLIST_EXTRA);
 
 // ---------- HTTP app ----------

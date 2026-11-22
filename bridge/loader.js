@@ -366,8 +366,18 @@
     };
     ws.onclose = function (ev) {
       dbg("socket closed:", ev.code, ev.reason);
+      if (state.ws && state.ws !== ws) return; // an older socket of this tab; a newer one is live
       state.sessionId = null;
       if (state.manualClose) { setStatus("idle"); return; }
+      if (ev.code === 4000) {
+        // The relay took this tab's slot for a newer connection with the same tab id
+        // (a duplicated browser tab copies it). Don't fight over it: take a new id and stop.
+        state.tabId = "t" + Math.random().toString(36).slice(2, 9);
+        try { sessionStorage.setItem("craftRelayTabId", state.tabId); } catch (e) { /* ignore */ }
+        setStatus("idle");
+        setNote("another tab took over this connection; click Connect agent to connect this tab too");
+        return;
+      }
       setStatus("reconnecting");
       setTimeout(function () {
         if (state.status === "reconnecting") {

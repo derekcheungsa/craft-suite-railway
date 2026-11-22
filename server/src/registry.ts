@@ -38,8 +38,18 @@ export class TabRegistry {
 
   /** Register a tab after a valid hello. Returns the session id. */
   register(ws: WebSocket, app: string, version: string, tabId: string): string {
+    // A tab that reconnects (reload, network blip) replaces its own old session,
+    // so it doesn't hold a second slot until the heartbeat reaps the first.
+    if (tabId && tabId !== "?") {
+      for (const [id, tab] of this.tabs) {
+        if (tab.tabId === tabId) {
+          this.tabs.delete(id);
+          try { tab.ws.close(4000, "replaced by a newer connection from the same tab"); } catch { /* already closed */ }
+        }
+      }
+    }
     if (this.tabs.size >= this.maxTabs) {
-      throw new Error(`relay already has the maximum of ${this.maxTabs} connected tabs`);
+      throw new Error(`relay already has the maximum of ${this.maxTabs} connected tabs: disconnect one (or close its tab) and try again`);
     }
     const sessionId = `s${++this.tabSeq}-${Math.random().toString(36).slice(2, 8)}`;
     const now = Date.now();
