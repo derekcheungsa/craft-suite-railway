@@ -123,28 +123,27 @@
 
   <section id="claude">
     <h2><span class="n">4</span>Optional: let Claude drive the apps</h2>
-    <p>Every app except Craft Anything can be controlled by <b>Claude</b>, Anthropic&rsquo;s AI assistant: you ask in plain words (&ldquo;make a budget table&rdquo;, &ldquo;fill in this PDF form&rdquo;) and it works in the app open in your browser. <span class="muted">This is entirely optional &mdash; the apps work fully on their own.</span></p>
-    <p>To use it you run your own small <b>relay</b> &mdash; a tiny server that passes messages between Claude and your browser tab. It&rsquo;s yours alone, so any costs (your Claude plan, and a small hosting plan such as Railway&rsquo;s) are on your own accounts. One-time setup takes about ten minutes:</p>
+    <p>Every app except AniCraft and Craft Anything can be controlled by <b>Claude</b>, Anthropic&rsquo;s AI assistant: you ask in plain words (&ldquo;make a budget table&rdquo;, &ldquo;fill in this PDF form&rdquo;) and it works in the app open in your browser. <span class="muted">This is entirely optional &mdash; the apps work fully on their own.</span></p>
+    <p>Claude talks to your browser through a <b>relay</b>, a small server that comes with your own copy of Craft Suite. If you&rsquo;re using someone else&rsquo;s Craft Suite site, get your own copy first: <a href="https://railway.com/deploy/craft-suite" rel="noopener">deploy it on Railway in one click</a>. It includes the apps, the relay and a private cloud for your files, and any costs (your Claude plan and your Railway plan) are on your own accounts.</p>
     <h3>One-time setup</h3>
     <ol>
-      <li><b>You&rsquo;ll need:</b> a Claude plan that lets you add custom connectors, a free <a href="https://github.com/signup" rel="noopener">GitHub</a> account and a <a href="https://railway.com" rel="noopener">Railway</a> account.</li>
-      <li><b>Copy the project:</b> open <a href="https://github.com/derekcheungsa/craft-suite-railway" rel="noopener">the Craft Suite project on GitHub</a> and click <b>Fork</b>.</li>
-      <li><b>Start your relay on Railway:</b> <b>New Project &rarr; Deploy from GitHub repo</b> &rarr; your fork. In the service&rsquo;s <b>Settings</b>, set <b>Root Directory</b> to <code>server</code>.</li>
-      <li><b>Make up two passwords</b> and add them in the service&rsquo;s <b>Variables</b>: <code>MCP_TOKEN</code> (32+ random characters) and <code>BRIDGE_TOKEN</code> (16+). Keep them private.</li>
-      <li><b>Give it an address:</b> <b>Settings &rarr; Networking &rarr; Generate Domain</b>. You&rsquo;ll get something like <code>https://your-relay.up.railway.app</code>.</li>
-      <li><b>Connect Claude:</b> in Claude, <b>Settings &rarr; Connectors &rarr; Add custom connector</b>. URL: your relay&rsquo;s address followed by <code>/mcp</code>. Header: <code>Authorization: Bearer &lt;your MCP_TOKEN&gt;</code>.</li>
+      <li><b>You&rsquo;ll need:</b> your own copy of Craft Suite on Railway, and a Claude plan that can add custom connectors (every plan can; the Free plan allows one).</li>
+      <li><b>Find your two passwords:</b> in Railway, open your project&rsquo;s <code>craft-relay</code> service &rarr; <b>Variables</b>. Note <code>MCP_TOKEN</code> (for Claude) and <code>BRIDGE_TOKEN</code> (for the apps). If they aren&rsquo;t there, add them yourself: 32+ random characters for <code>MCP_TOKEN</code>, 16+ for <code>BRIDGE_TOKEN</code>. Keep both private.</li>
+      <li><b>Find your relay&rsquo;s address:</b> on the same service, <b>Settings &rarr; Networking</b>. It looks like <code>https://craft-relay-production.up.railway.app</code>. If there isn&rsquo;t one, click <b>Generate Domain</b>.</li>
+      <li><b>Connect Claude:</b> in Claude, open <b>Customize &rarr; Connectors &rarr; Add custom connector</b>. Name it <i>Craft Suite</i>, and for the server URL enter your relay&rsquo;s address followed by <code>/mcp</code>. Click <b>Continue</b>, then under <b>Request headers</b> add the header <code>Authorization</code> with the value <code>Bearer</code>, a space, and your <code>MCP_TOKEN</code>. Claude sends the value exactly as typed, so include the word <code>Bearer</code>.</li>
     </ol>
     <h3>Each time you want Claude&rsquo;s help</h3>
     <ol>
-      <li>Open an app and click the <span class="fab">&#10686;</span> button in the bottom-right corner.</li>
-      <li><b>Relay address:</b> replace <code>/relay</code> with <b>your</b> relay&rsquo;s address (<code>https://your-relay.up.railway.app</code>).</li>
-      <li>Paste your <code>BRIDGE_TOKEN</code> and press <b>Connect agent</b>. Your browser remembers both next time.</li>
-      <li>Ask Claude: <i>&ldquo;What tabs are connected?&rdquo;</i> &mdash; then tell it what you&rsquo;d like done.</li>
+      <li>Open an app on your copy of Craft Suite and click the <span class="fab">&#10686;</span> button in the bottom-right corner.</li>
+      <li>Under <b>Agent bridge</b>, leave the relay address as <code>/relay</code> (that&rsquo;s your own relay), paste your <code>BRIDGE_TOKEN</code> and press <b>Connect agent</b>. Your browser remembers both next time.</li>
+      <li>Want Claude to work across apps? Connect each app&rsquo;s tab the same way: up to 10 at once, all through the same Claude connector.</li>
+      <li>Ask Claude: <i>&ldquo;What tabs are connected?&rdquo;</i> &mdash; then tell it what you&rsquo;d like done, and in which app.</li>
     </ol>
+    <p class="muted">Claude can pass files between apps through the shelf, which stays in your browser, or through your Craft Cloud library once you&rsquo;re signed in under Craft Cloud in that tab: for example, &ldquo;export this chart from GridCraft and put it on a slide in DeckCraft.&rdquo; Keep EffectCraft and FilmCraft tabs visible while Claude works in them; hidden tabs pause.</p>
     <h3>Keeping up to date</h3>
-    <p><b>New apps and app updates need nothing from you.</b> They appear on this site for everyone, and Claude can drive them through the relay you already have &mdash; the relay only passes messages and doesn&rsquo;t care which apps exist.</p>
-    <p class="muted">The rare exception is a change to the relay itself. You don&rsquo;t need to watch for it: when your relay is out of date, the <span class="fab">&#10686;</span> button shows a small yellow dot and its panel says so. Then click <b>Sync fork &rarr; Update branch</b> on your GitHub copy; Railway rebuilds your relay in a few minutes, and you reconnect.</p>
-    <div class="tip">Nothing connects until you press Connect, Claude can only reach the tab you connected, and the panel has a read-only switch and a Disconnect button.</div>
+    <p><b>App updates need nothing from you</b> beyond updating your copy, and the relay only passes messages, so it works with every app.</p>
+    <p class="muted">When your relay is out of date, the <span class="fab">&#10686;</span> button shows a small yellow dot and its panel says so. Update your copy in Railway (on each service, press <b>Ctrl+K &rarr; Deploy latest commit</b>), then reconnect.</p>
+    <div class="tip">Nothing connects until you press Connect, Claude can only reach the tabs you connected, and the panel has a read-only switch and a Disconnect button.</div>
   </section>
 
   <section id="trouble">
