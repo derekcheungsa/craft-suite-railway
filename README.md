@@ -165,7 +165,7 @@ the tab visible; in a hidden tab, commands wait until the relay's 20-second time
 
 **Safety:** token-protected MCP; origin-checked, token-gated bridge connections; a
 denylist of destructive commands; a read-only switch and Disconnect in the page; 10
-calls a second, 20-second timeout, at most 5 tabs; no parameters or images in relay
+calls a second, 20-second timeout, at most 10 tabs (`MAX_TABS`; a reloaded tab reuses its slot); no parameters or images in relay
 logs. While connected, Claude can act only in that tab, and the page shows that it is
 connected.
 
