@@ -174,7 +174,7 @@ The relay's original design is Derek Cheung's: see `PRD.md` and
 
 ## Credits, licences and trademarks
 
-- **Craft Suite** was created by Derek Cheung and is dual licensed MIT / Apache-2.0
+- **Craft Suite** was created by Derek Cheung and Ted Melnick and is dual licensed MIT / Apache-2.0
   (see License below).
 - **The apps** are by the ArtCraft team (storytold), MIT / Apache-2.0. This is an
   independent community project, not made, sponsored or endorsed by the ArtCraft team.
